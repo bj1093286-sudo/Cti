@@ -1,4 +1,4 @@
-/* 통화 대시보드 */
+/* miso internet sales 통화 대시보드 */
 (() => {
   "use strict";
 
@@ -153,7 +153,8 @@
       s.textContent = st.storage === "permanent" ? "저장소 연결됨"
         : st.storage === "temporary" ? "임시 저장소 · 데모 데이터" : "이 컴퓨터에 저장 중";
     } catch { setupMode = false; }
-    $("#login-title").textContent = setupMode ? "처음이시네요" : "미소 통화 녹취";
+    $("#login-title").replaceChildren(...(setupMode ? ["처음이시네요"]
+      : [el("span", { class: "login-brand" }, "miso internet sales"), "통화 대시보드"]));
     $("#login-sub").textContent = setupMode ? "저장소가 연결됐어요. 관리자 아이디와 비밀번호를 정해 주세요." : "아이디와 비밀번호를 입력해 주세요";
     $("#password2-row").hidden = !setupMode;
     $("#login-btn").textContent = setupMode ? "관리자 계정 만들고 시작하기" : "로그인";

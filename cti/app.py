@@ -1,4 +1,4 @@
-"""CTI 통화 대시보드 HTTP 서버 (표준 라이브러리만 사용).
+"""miso internet sales 통화 대시보드 HTTP 서버 (표준 라이브러리만 사용).
 
 환경 변수
 - CTI_DB           SQLite 파일 경로        (기본: ./data/cti.db)
@@ -482,7 +482,7 @@ def main() -> None:
     httpd = ThreadingHTTPServer((host, port), make_handler(cfg))
     if interval > 0:
         threading.Thread(target=_ingest_loop, args=(cfg, interval), daemon=True).start()
-    print(f"CTI 대시보드: http://127.0.0.1:{port}  (DB: {cfg.db_path}, 녹취 폴더: {cfg.sync_root})")
+    print(f"miso internet sales 통화 대시보드: http://127.0.0.1:{port}  (DB: {cfg.db_path}, 녹취 폴더: {cfg.sync_root})")
     if host in ("0.0.0.0", ""):
         for ip in _local_ips():
             print(f"  휴대폰·다른 컴퓨터에서: http://{ip}:{port}")

@@ -1,4 +1,4 @@
-"""CTI 통화 대시보드."""
+"""miso internet sales 통화 대시보드."""
 import os
 import time
 

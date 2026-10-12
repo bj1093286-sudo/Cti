@@ -1,4 +1,4 @@
-# CTI 통화 대시보드
+# miso internet sales 통화 대시보드
 
 아웃바운드 상담원의 발신 통화 기록(CTI)을 집계해 보여주는 웹 대시보드입니다. Python 표준 라이브러리와 SQLite만 사용하며 별도 설치가 필요 없습니다(Python 3.10+). 차트는 `static/vendor/chart.umd.js`(Chart.js 4.4.1, MIT)를 내장해 오프라인에서도 동작합니다.
 

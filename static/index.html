@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#f2f4f6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="미소 통화 녹취">
+  <meta name="apple-mobile-web-app-title" content="IS 통화 대시보드">
   <link rel="icon" href="/static/brand/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/brand/icon-32.png">
   <link rel="apple-touch-icon" href="/static/brand/icon-180.png">
@@ -15,8 +15,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400..800&display=swap">
-  <title>미소 통화 녹취</title>
-  <link rel="stylesheet" href="/static/app.css?v=20261012-3">
+  <title>miso internet sales 통화 대시보드</title>
+  <link rel="stylesheet" href="/static/app.css?v=20261012-5">
   <script src="/static/vendor/chart.umd.js?v=4.4.1"></script>
 </head>
 <body>
@@ -25,7 +25,7 @@
     <form id="login-form" class="login-form" novalidate>
       <div class="login-head">
         <img class="logo" src="/static/brand/icon-192.png" alt="미소" width="56" height="56">
-        <h1 id="login-title">미소 통화 녹취</h1>
+        <h1 id="login-title"><span class="login-brand">miso internet sales</span>통화 대시보드</h1>
         <p class="sub" id="login-sub">아이디와 비밀번호를 입력해 주세요</p>
       </div>
       <label class="input">
@@ -50,7 +50,7 @@
   <div id="app-view" class="app" hidden>
     <header class="topbar">
       <div class="topbar-inner">
-        <a class="brand" href="#calls"><img src="/static/brand/logo-64.png" alt="미소" width="30" height="30">통화 녹취</a>
+        <a class="brand" href="#calls"><img src="/static/brand/logo-64.png" alt="miso" width="30" height="30"><span class="brand-text"><span class="brand-sub">miso internet sales</span>통화 대시보드</span></a>
         <nav class="tabs-top" aria-label="메뉴">
           <a class="nav-item" href="#calls" data-view="calls">녹취</a>
           <a class="nav-item" href="#stats" data-view="stats">통계</a>
@@ -354,6 +354,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="/static/app.js?v=20261012-3"></script>
+  <script src="/static/app.js?v=20261012-5"></script>
 </body>
 </html>
