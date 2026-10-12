@@ -330,7 +330,8 @@ def make_handler(cfg: Config):
                 try:
                     return self._send_json(200, calls.search(
                         conn, period, _parse_agent(q), q.get("q"),
-                        _parse_int(q, "same_as"), _parse_int(q, "min_sec"), q.get("cursor")))
+                        _parse_int(q, "same_as"), _parse_int(q, "min_sec"), q.get("cursor"),
+                        hour_from=_parse_int(q, "hour_from"), hour_to=_parse_int(q, "hour_to")))
                 except calls.SearchError as e:
                     raise ApiError(HTTPStatus.BAD_REQUEST, str(e))
             m = re.fullmatch(r"/api/calls/(\d+)", path)

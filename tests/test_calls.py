@@ -36,15 +36,25 @@ class CallsTest(unittest.TestCase):
         self.assertTrue(all(i["playable"] for i in r["items"]))
         self.assertEqual(r["items"][0]["agent_name"], "이서준")
 
-    def test_full_number_search_ignores_period(self):
+    def test_full_number_search(self):
         for q in ("010-1111-2222", "01011112222", "+82 10 1111 2222"):
-            r = calls.search(self.conn, self.day, q=q)
+            r = calls.search(self.conn, None, q=q)
             self.assertEqual(self.ids(r), ["f1", "f2"], q)
             self.assertTrue(r["by_customer"])
+        # 날짜 조건도 함께 적용(주문 조회처럼)
+        self.assertEqual(self.ids(calls.search(self.conn, self.day, q="010-1111-2222")), ["f1"])
         self.assertEqual(self.ids(calls.search(self.conn, None, q="1600-4112")), ["f4"])
+
+    def test_hour_range(self):
+        self.assertEqual(self.ids(calls.search(self.conn, self.day, hour_from=10, hour_to=12)), ["f3"])
+        self.assertEqual(self.ids(calls.search(self.conn, self.day, hour_from=12)), ["f5", "f4"])
+        self.assertEqual(self.ids(calls.search(self.conn, None, hour_from=9, hour_to=10, agent_id=1)), ["f1"])
+        with self.assertRaises(calls.SearchError):
+            calls.search(self.conn, None, hour_from=15, hour_to=10)
 
     def test_last4_and_agent_name(self):
         self.assertEqual(self.ids(calls.search(self.conn, None, q="2222")), ["f3", "f1", "f2"])
+        self.assertEqual(self.ids(calls.search(self.conn, self.day, q="2222")), ["f3", "f1"])
         self.assertEqual(self.ids(calls.search(self.conn, self.day, q="서준")), ["f5", "f4", "f3"])
 
     def test_bad_query(self):

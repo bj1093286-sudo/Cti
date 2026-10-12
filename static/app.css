@@ -250,6 +250,29 @@ h1, h2, h3, p { margin: 0; }
 .fail-box { margin-top: 8px; background: var(--danger-weak); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--danger); }
 .fail-box ul { margin: 6px 0 0; padding-left: 18px; word-break: break-all; }
 
+/* ---------- 통화 조회 폼 ---------- */
+.lookup { margin: 4px 0 16px; }
+.lookup-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.lookup-head h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; }
+.link-btn { border: 0; background: transparent; color: var(--text-3); font-weight: 600; font-size: 14px; padding: 8px; }
+.lk-row { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.lk-label { font-weight: 600; color: var(--text-2); padding-top: 11px; font-size: 15px; }
+.lk-field { display: grid; gap: 8px; min-width: 0; }
+.lk-field select, .lk-field input, .date-pair input, .date-pair select {
+  height: 46px; border: 0; border-radius: 12px; background: var(--fill); padding: 0 12px; font-size: 16px; width: 100%; min-width: 0;
+  outline: 2px solid transparent; transition: outline-color .15s;
+}
+.lk-field select:focus, .lk-field input:focus { outline-color: var(--blue); background: var(--card); }
+.date-pair { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; }
+.date-pair span { color: var(--text-3); }
+.chips-in { margin: 0; padding: 0; flex-wrap: wrap; overflow: visible; }
+.chips-in .chip { height: 34px; padding: 0 12px; font-size: 13px; background: var(--fill); box-shadow: none; }
+.chips-in .chip[aria-checked="true"] { background: var(--text); color: #fff; }
+.lk-check { display: flex; align-items: center; gap: 8px; padding: 14px 0 4px; color: var(--text-2); font-size: 15px; }
+.lk-check input { width: 20px; height: 20px; accent-color: var(--blue); }
+.lookup .form-msg { margin: 8px 0 0; }
+.lookup > .btn { margin-top: 14px; }
+
 /* ---------- 녹취 목록 ---------- */
 .page-mid { max-width: 760px; }
 .search {
@@ -383,6 +406,8 @@ h1, h2, h3, p { margin: 0; }
     border-top: 1px solid var(--line);
   }
   .day-head { top: calc(60px + env(safe-area-inset-top)); }
+  .lk-row { grid-template-columns: 1fr; gap: 8px; padding: 14px 0; }
+  .lk-label { padding-top: 0; font-size: 14px; }
   .list-card { padding: 4px 8px 12px; }
   .tab { flex: 1; display: grid; place-items: center; align-content: center; gap: 2px; color: var(--text-4); text-decoration: none; font-size: 11px; font-weight: 600; }
   .tab.active { color: var(--text); }

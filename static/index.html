@@ -60,25 +60,55 @@
       </div>
     </header>
 
-    <!-- 녹취 목록 -->
+    <!-- 녹취 조회 -->
     <main class="page page-mid" id="calls-view">
-      <form class="search" id="call-search" role="search">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-        <input id="call-q" type="search" enterkeyhint="search" autocomplete="off"
-               placeholder="고객번호 (전체 또는 뒤 4자리) · 상담원 이름" aria-label="녹취 검색">
-        <button type="button" id="call-q-clear" class="icon-btn" aria-label="검색어 지우기" hidden>
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".35"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
-      </form>
-      <div class="filterbar">
-        <div class="chips" id="call-chips" role="radiogroup" aria-label="기간"></div>
-        <div id="call-range" class="custom-range" hidden>
-          <input type="date" id="call-start" aria-label="시작일">
-          <span class="muted">~</span>
-          <input type="date" id="call-end" aria-label="종료일">
-          <button id="call-apply" class="btn btn-primary btn-sm">조회</button>
+      <form class="card lookup" id="lookup" novalidate>
+        <div class="lookup-head">
+          <h2>통화 조회</h2>
+          <button type="button" class="link-btn" id="lookup-reset">초기화</button>
         </div>
-      </div>
+
+        <div class="lk-row">
+          <span class="lk-label">날짜</span>
+          <div class="lk-field">
+            <div class="chips chips-in" id="lk-dates" role="radiogroup" aria-label="빠른 날짜"></div>
+            <div class="date-pair">
+              <input type="date" id="lk-start" aria-label="시작 날짜">
+              <span>~</span>
+              <input type="date" id="lk-end" aria-label="끝 날짜">
+            </div>
+          </div>
+        </div>
+
+        <div class="lk-row">
+          <span class="lk-label">시간</span>
+          <div class="lk-field">
+            <div class="date-pair">
+              <select id="lk-hfrom" aria-label="시작 시각"></select>
+              <span>~</span>
+              <select id="lk-hto" aria-label="끝 시각"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="lk-row">
+          <label class="lk-label" for="lk-agent">상담원</label>
+          <div class="lk-field"><select id="lk-agent"><option value="">전체</option></select></div>
+        </div>
+
+        <div class="lk-row">
+          <label class="lk-label" for="lk-num">고객번호</label>
+          <div class="lk-field">
+            <input id="lk-num" type="search" inputmode="tel" enterkeyhint="search" autocomplete="off"
+                   placeholder="전체 번호 또는 뒤 4자리 (비우면 전체)">
+          </div>
+        </div>
+
+        <label class="lk-check"><input type="checkbox" id="lk-short"> 짧은 통화 빼기</label>
+        <p id="lookup-err" class="form-msg err" role="alert"></p>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">조회하기</button>
+      </form>
+
       <div class="list-summary" id="calls-summary" aria-live="polite"></div>
       <section class="card list-card">
         <div id="calls-list"></div>

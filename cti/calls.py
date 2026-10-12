@@ -4,7 +4,8 @@
 - 숫자 8자리 이상: 전체 번호 → 같은 방식으로 HMAC 해서 customer_key 와 비교(원문 번호는 DB에 없음)
 - 숫자 4자리: 뒤 4자리 → 마스킹 번호 끝자리와 비교
 - 그 외 글자: 상담원 이름
-고객으로 찾을 때(번호 검색, '이 고객 통화 모두 보기')는 기간과 관계없이 전체에서 찾는다.
+조회 조건(날짜·시간대·상담원·번호)은 모두 함께 적용한다(주문 조회처럼).
+'이 고객 통화 모두 보기'(same_as)만 날짜와 관계없이 전체에서 찾는다.
 """
 from __future__ import annotations
 
@@ -31,7 +32,8 @@ def _phone_digits(q: str) -> str:
 
 def search(conn, period: Period | None, agent_id: int | None = None, q: str | None = None,
            same_as: int | None = None, min_sec: int | None = None, cursor: str | None = None,
-           limit: int = PAGE) -> dict:
+           limit: int = PAGE, hour_from: int | None = None, hour_to: int | None = None) -> dict:
+    """hour_from 이상 hour_to 미만 시각(0~24시)에 시작한 통화."""
     where, args = [], []
     by_customer = False
     q = (q or "").strip()
@@ -56,11 +58,17 @@ def search(conn, period: Period | None, agent_id: int | None = None, q: str | No
         else:
             where.append("a.name LIKE ?"); args.append(f"%{q}%")
 
-    if period is not None and not by_customer:
+    if period is not None and same_as is None:
         where.append("c.started_at >= ? AND c.started_at < ?")
         args += [period.start.isoformat(), (period.end + timedelta(days=1)).isoformat()]
     if agent_id is not None:
         where.append("c.agent_id = ?"); args.append(agent_id)
+    if hour_from is not None or hour_to is not None:
+        lo, hi = hour_from or 0, 24 if hour_to is None else hour_to
+        if not (0 <= lo < hi <= 24):
+            raise SearchError("시간대를 다시 골라 주세요.")
+        where.append("substr(c.started_at, 12, 2) >= ? AND substr(c.started_at, 12, 2) < ?")
+        args += [f"{lo:02d}", f"{hi:02d}"]
     if min_sec:
         where.append("c.duration_sec >= ?"); args.append(min_sec)
 

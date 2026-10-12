@@ -190,7 +190,7 @@
     if (!agents.some((a) => String(a.id) === String(state.agentId))) state.agentId = "";
     sel.value = state.agentId;
     syncFilterUI();
-    renderCallChips();
+    setupLookup();
     try { state.minSec = (await api("/api/settings")).min_call_sec; } catch { state.minSec = 0; }
     dashboardStale = true;
     callsLoaded = false;
@@ -649,85 +649,103 @@
     }
   }
 
-  // ---------- 녹취 목록 ----------
-  const CALL_PRESETS = [
-    ["today", "오늘"], ["yesterday", "어제"], ["this_week", "이번 주"], ["this_month", "이번 달"],
-    ["all", "전체 기간"], ["custom", "직접 지정"],
-  ];
+  // ---------- 통화 조회 ----------
+  const QUICK_DATES = [["today", "오늘"], ["yesterday", "어제"], ["this_week", "이번 주"], ["this_month", "이번 달"], ["all", "전체"]];
   const cs = {
-    preset: "today", start: null, end: null, agentId: "", q: "", sameAs: null, sameLabel: "",
-    hideShort: false, items: [], cursor: null, total: 0, byCustomer: false, seq: 0, current: null,
+    start: null, end: null, hfrom: 0, hto: 24, agentId: "", num: "", hideShort: false,
+    sameAs: null, sameLabel: "", items: [], cursor: null, total: 0, seq: 0, current: null, error: null,
   };
-  try {
-    const saved = JSON.parse(localStorage.getItem("cti.calls") || "{}");
-    if (saved.preset) Object.assign(cs, { preset: saved.preset, start: saved.start, end: saved.end, hideShort: !!saved.hideShort });
-  } catch { /* 저장소 없음 */ }
-  const saveCalls = () => {
-    try { localStorage.setItem("cti.calls", JSON.stringify({ preset: cs.preset, start: cs.start, end: cs.end, hideShort: cs.hideShort })); } catch { /* 무시 */ }
-  };
-
-  function renderCallChips() {
-    const agents = [...$("#agent-filter").options].slice(1);
-    $("#call-chips").replaceChildren(
-      ...CALL_PRESETS.map(([key, label]) => el("button", {
-        class: "chip", role: "radio", "aria-checked": String(cs.preset === key),
-        onclick: () => {
-          cs.preset = key;
-          if (key === "custom") { cs.start = cs.start || todayIso(); cs.end = cs.end || todayIso(); renderCallChips(); return; }
-          renderCallChips(); saveCalls(); loadCalls();
-        },
-      }, label)),
-      el("label", { class: `chip chip-select${cs.agentId ? " on" : ""}` },
-        el("span", {}, cs.agentId ? agents.find((o) => o.value === cs.agentId)?.textContent || "상담원" : "상담원 전체"),
-        el("select", {
-          "aria-label": "상담원",
-          onchange: (e) => { cs.agentId = e.target.value; renderCallChips(); loadCalls(); },
-        }, el("option", { value: "" }, "상담원 전체"),
-        agents.map((o) => el("option", { value: o.value, selected: o.value === cs.agentId }, o.textContent)))),
-      el("button", {
-        class: "chip chip-toggle", "aria-pressed": String(cs.hideShort),
-        title: "처리 건수 기준보다 짧은 통화를 숨겨요",
-        onclick: () => { cs.hideShort = !cs.hideShort; renderCallChips(); saveCalls(); loadCalls(); },
-      }, "짧은 통화 숨기기"));
-    $("#call-range").hidden = cs.preset !== "custom";
-    $("#call-start").value = cs.start || todayIso();
-    $("#call-end").value = cs.end || todayIso();
+  const iso = (d) => { const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 10); };
+  function quickRange(key) {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const add = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+    if (key === "today") return [iso(t), iso(t)];
+    if (key === "yesterday") return [iso(add(t, -1)), iso(add(t, -1))];
+    if (key === "this_week") return [iso(add(t, -((t.getDay() + 6) % 7))), iso(t)];
+    if (key === "this_month") return [iso(new Date(t.getFullYear(), t.getMonth(), 1)), iso(t)];
+    return ["", ""]; // 전체
   }
-  $("#call-apply").addEventListener("click", () => {
-    const s = $("#call-start").value, e = $("#call-end").value;
-    if (!s || !e) return toast("시작일과 종료일을 골라 주세요.");
-    [cs.start, cs.end] = s <= e ? [s, e] : [e, s];
-    saveCalls(); loadCalls();
-  });
+  const hourLabel = (h) => (h === 24 ? "24시" : `${String(h).padStart(2, "0")}시`);
 
-  // 검색: 입력을 멈추면 자동 검색, 엔터는 바로
-  let qTimer = null;
-  const qInput = $("#call-q");
-  const setQ = (v) => {
-    cs.q = v.trim(); cs.sameAs = null;
-    $("#call-q-clear").hidden = !qInput.value;
-    loadCalls();
-  };
-  qInput.addEventListener("input", () => {
-    $("#call-q-clear").hidden = !qInput.value;
-    clearTimeout(qTimer);
-    const v = qInput.value.trim(), digits = v.replace(/\D/g, "");
-    // 숫자는 4자리 또는 8자리 이상일 때만 자동 검색(타이핑 중간 오류 방지)
-    if (/^[\d\s\-+().]*$/.test(v) && v && digits.length !== 4 && digits.length < 8) return;
-    qTimer = setTimeout(() => setQ(qInput.value), 350);
+  function setupLookup() {
+    $("#lk-hfrom").replaceChildren(...Array.from({ length: 24 }, (_, h) => el("option", { value: h }, hourLabel(h))));
+    $("#lk-hto").replaceChildren(...Array.from({ length: 24 }, (_, h) => el("option", { value: h + 1 }, hourLabel(h + 1))));
+    const agents = [...$("#agent-filter").options].slice(1);
+    $("#lk-agent").replaceChildren(el("option", { value: "" }, "전체"), ...agents.map((o) => el("option", { value: o.value }, o.textContent)));
+    resetLookup();
+  }
+  function resetLookup() {
+    [cs.start, cs.end] = quickRange("today");
+    Object.assign(cs, { hfrom: 0, hto: 24, agentId: "", num: "", hideShort: false, sameAs: null });
+    fillLookup();
+  }
+  function fillLookup() {
+    $("#lk-start").value = cs.start; $("#lk-end").value = cs.end;
+    $("#lk-hfrom").value = cs.hfrom; $("#lk-hto").value = cs.hto;
+    $("#lk-agent").value = cs.agentId; $("#lk-num").value = cs.num; $("#lk-short").checked = cs.hideShort;
+    markQuickDate();
+  }
+  function markQuickDate() {
+    const s = $("#lk-start").value, e = $("#lk-end").value;
+    // 같은 기간이 여러 개면(월요일의 오늘=이번 주) 앞의 것 하나만 표시
+    const hit = QUICK_DATES.findIndex(([key]) => { const [qs, qe] = quickRange(key); return qs === s && qe === e; });
+    $("#lk-dates").replaceChildren(...QUICK_DATES.map(([key, label], i) => {
+      return el("button", {
+        type: "button", class: "chip", role: "radio", "aria-checked": String(i === hit),
+        onclick: () => { [$("#lk-start").value, $("#lk-end").value] = quickRange(key); markQuickDate(); },
+      }, label);
+    }));
+  }
+  $("#lk-start").addEventListener("change", markQuickDate);
+  $("#lk-end").addEventListener("change", markQuickDate);
+  $("#lookup-reset").addEventListener("click", () => { resetLookup(); $("#lookup-err").textContent = ""; loadCalls(); });
+
+  $("#lookup").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const err = $("#lookup-err"); err.textContent = "";
+    let s = $("#lk-start").value, en = $("#lk-end").value;
+    if ((s && !en) || (!s && en)) { err.textContent = "날짜를 둘 다 고르거나 '전체'를 눌러 주세요."; return; }
+    if (s && en && s > en) [s, en] = [en, s];
+    const hf = Number($("#lk-hfrom").value), ht = Number($("#lk-hto").value);
+    if (hf >= ht) { err.textContent = "끝 시각을 시작 시각보다 늦게 골라 주세요."; return; }
+    const num = $("#lk-num").value.trim(), digits = num.replace(/\D/g, "");
+    if (num && /^[\d\s\-+().]+$/.test(num) && digits.length !== 4 && digits.length < 8) {
+      err.textContent = "고객번호는 전체 번호나 뒤 4자리로 넣어 주세요."; return;
+    }
+    Object.assign(cs, { start: s, end: en, hfrom: hf, hto: ht, agentId: $("#lk-agent").value, num,
+      hideShort: $("#lk-short").checked, sameAs: null });
+    $("#lk-num").blur();
+    loadCalls().then(() => {
+      // 휴대폰: 조회 후 결과가 보이게 스크롤
+      if (innerWidth <= 720) $("#calls-summary").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
-  $("#call-search").addEventListener("submit", (e) => { e.preventDefault(); clearTimeout(qTimer); qInput.blur(); setQ(qInput.value); });
-  $("#call-q-clear").addEventListener("click", () => { qInput.value = ""; setQ(""); qInput.focus(); });
 
   function callsQuery(cursor) {
-    const p = new URLSearchParams({ preset: cs.preset });
-    if (cs.preset === "custom") { p.set("start", cs.start); p.set("end", cs.end); }
+    const p = new URLSearchParams();
+    if (cs.start && cs.end) { p.set("preset", "custom"); p.set("start", cs.start); p.set("end", cs.end); }
+    else p.set("preset", "all");
+    if (cs.hfrom > 0) p.set("hour_from", cs.hfrom);
+    if (cs.hto < 24) p.set("hour_to", cs.hto);
     if (cs.agentId) p.set("agent_id", cs.agentId);
     if (cs.sameAs) p.set("same_as", cs.sameAs);
-    else if (cs.q) p.set("q", cs.q);
+    else if (cs.num) p.set("q", cs.num);
     if (cs.hideShort && state.minSec) p.set("min_sec", state.minSec);
     if (cursor) p.set("cursor", cursor);
     return p;
+  }
+  /** 조회 조건을 사람이 읽는 한 줄로 */
+  function conditionText() {
+    if (cs.sameAs) return `${cs.sameLabel} 고객 · 모든 날짜`;
+    const parts = [];
+    if (!cs.start) parts.push("모든 날짜");
+    else if (cs.start === cs.end) parts.push(`${md(cs.start)} (${dow(cs.start)})`);
+    else parts.push(`${md(cs.start)} ~ ${md(cs.end)}`);
+    if (cs.hfrom > 0 || cs.hto < 24) parts.push(`${cs.hfrom}시~${cs.hto}시`);
+    if (cs.agentId) parts.push($(`#lk-agent option[value="${cs.agentId}"]`)?.textContent || "상담원");
+    if (cs.num) parts.push(`‘${cs.num}’`);
+    if (cs.hideShort) parts.push("짧은 통화 제외");
+    return parts.join(" · ");
   }
 
   async function loadCalls(more = false) {
@@ -741,7 +759,6 @@
       cs.cursor = r.next_cursor; cs.total = r.total; cs.byCustomer = r.by_customer;
       cs.error = null;
       renderCalls();
-      if (!more) window.scrollTo(0, 0);
     } catch (err) {
       if (seq !== cs.seq) return;
       cs.error = err.message; cs.items = []; cs.cursor = null; cs.total = 0;
@@ -753,22 +770,17 @@
 
   function renderCalls() {
     const sum = $("#calls-summary");
-    const label = CALL_PRESETS.find(([k]) => k === cs.preset)?.[1] || "";
     if (cs.error) {
       sum.replaceChildren(el("span", { class: "warn" }, cs.error));
-    } else if (cs.sameAs) {
-      sum.replaceChildren(el("span", {}, el("b", {}, cs.sameLabel), ` 고객 통화 `, el("b", {}, `${fmtInt(cs.total)}건`), " · 모든 기간"),
-        el("button", { class: "clear", onclick: () => { cs.sameAs = null; loadCalls(); } }, "해제"));
-    } else if (cs.q) {
-      sum.replaceChildren(el("span", {}, `‘${cs.q}’ 검색 결과 `, el("b", {}, `${fmtInt(cs.total)}건`), cs.byCustomer ? " · 모든 기간" : ` · ${label}`),
-        el("button", { class: "clear", onclick: () => { qInput.value = ""; setQ(""); } }, "지우기"));
     } else {
-      sum.replaceChildren(el("span", {}, `${label} 녹취 `, el("b", {}, `${fmtInt(cs.total)}건`)));
+      sum.replaceChildren(...[el("span", {}, conditionText(), " → ", el("b", {}, `${fmtInt(cs.total)}건`)),
+        cs.sameAs ? el("button", { class: "clear", onclick: () => { cs.sameAs = null; loadCalls(); } }, "해제") : null,
+      ].filter(Boolean));
     }
 
     const list = $("#calls-list");
     if (!cs.items.length) {
-      list.replaceChildren(el("div", { class: "empty" }, cs.error ? "검색어를 확인해 주세요" : "녹취가 없어요"));
+      list.replaceChildren(el("div", { class: "empty" }, cs.error ? "조회 조건을 확인해 주세요" : "조건에 맞는 통화가 없어요"));
       $("#calls-more").hidden = true;
       return;
     }
@@ -870,8 +882,7 @@
     same.hidden = !d.customer_masked || d.same_customer_calls < 2;
     same.textContent = `이 고객 통화 모두 보기 · ${fmtInt(d.same_customer_calls)}건`;
     same.onclick = () => {
-      cs.sameAs = d.id; cs.sameLabel = d.customer_masked; cs.q = ""; qInput.value = "";
-      $("#call-q-clear").hidden = true;
+      cs.sameAs = d.id; cs.sameLabel = d.customer_masked;
       closeCall();
       if (location.hash !== "#calls") location.hash = "#calls";
       loadCalls();
