@@ -77,13 +77,16 @@ def bootstrap(cfg: Config) -> None:
     try:
         if cfg.demo and conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0:
             demo.seed(conn)
-        if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-            # 콘솔이 없는 환경(Vercel)용: 환경 변수로 첫 관리자 계정을 만든다
-            pw = os.environ.get("CTI_ADMIN_PASSWORD")
-            if pw:
-                auth.create_user(conn, os.environ.get("CTI_ADMIN_USER", "admin"), pw, "admin")
-            elif cfg.demo:
-                demo.create_demo_users(conn)
+        # 콘솔이 없는 환경(Vercel)용: 환경 변수의 관리자 계정을 만들거나 그 비밀번호로 맞춘다
+        # (환경 변수만 바꾸면 비밀번호 변경·분실 복구가 된다)
+        pw = os.environ.get("CTI_ADMIN_PASSWORD")
+        if pw:
+            name = os.environ.get("CTI_ADMIN_USER", "admin")
+            row = conn.execute("SELECT password_hash, role FROM users WHERE username = ?", (name,)).fetchone()
+            if row is None or row["role"] != "admin" or not auth.verify_password(pw, row["password_hash"]):
+                auth.create_user(conn, name, pw, "admin")
+        elif cfg.demo and conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
+            demo.create_demo_users(conn)
     finally:
         conn.close()
 
