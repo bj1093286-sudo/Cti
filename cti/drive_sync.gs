@@ -9,7 +9,7 @@
  *  이후 5분마다 새 녹취를 대시보드로 보냅니다. 녹취 파일 자체는 드라이브에 그대로 있어요.
  *
  *  대시보드에서 '백업하고 비우기'를 누르면, 다음 실행 때 그 상담원 폴더의 녹취를
- *  같은 폴더 안 '_백업/상담원/날짜' 폴더로 옮깁니다(지우지 않음, 계속 재생 가능).
+ *  같은 폴더 안 '_백업/상담원' 폴더로 옮깁니다(지우지 않음, 계속 재생 가능).
  */
 const CTI_URL = '{{CTI_URL}}';
 const CTI_TOKEN = '{{CTI_TOKEN}}';
@@ -87,9 +87,8 @@ function runBackups_(started) {
       chunk.forEach(function (f) { if (f.durationMs == null) f.durationMs = mp4DurationMs_(f.id, f.name); });
       post_({ files: chunk, first: false });
     }
-    // 2) _백업/상담원/날짜 폴더로 옮기기
-    const stamp = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HHmm');
-    const dest = ensureFolder_(ensureFolder_(ensureFolder_(DriveApp.getFolderById(FOLDER_ID.trim()), BACKUP_DIR), t.agent), stamp);
+    // 2) _백업/상담원 폴더로 옮기기
+    const dest = ensureFolder_(ensureFolder_(DriveApp.getFolderById(FOLDER_ID.trim()), BACKUP_DIR), t.agent);
     const moved = [];
     let failed = 0, lastError = null, done = true;
     for (let i = 0; i < files.length; i++) {
