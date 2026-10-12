@@ -243,6 +243,13 @@ h1, h2, h3, p { margin: 0; }
 .status-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; font-size: 15px; }
 .status-row .k { color: var(--text-3); }
 .status-row .v { font-weight: 600; text-align: right; }
+.sub-h { font-size: 16px; font-weight: 700; margin: 24px 0 4px; }
+#backup-agents { margin-top: 12px; }
+.list .btn-sm { height: 36px; padding: 0 14px; font-size: 14px; flex: none; }
+.tag { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+.tag-wait { background: var(--blue-weak); color: var(--blue-text); }
+.tag-done { background: var(--fill); color: var(--text-3); }
+.tag-fail { background: var(--danger-weak); color: var(--danger); }
 .steps { margin: 0 0 16px; padding-left: 20px; display: grid; gap: 12px; color: var(--text-2); font-size: 15px; }
 .steps b { color: var(--text); }
 .steps a { color: var(--blue-text); font-weight: 600; }

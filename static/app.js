@@ -99,12 +99,13 @@
     clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), 2600);
   };
   /** 토스식 확인 창. 지원 안 되는 브라우저는 기본 confirm. */
-  function ask(title, body, okLabel) {
+  function ask(title, body, okLabel, danger = false) {
     const d = $("#confirm");
     if (typeof d.showModal !== "function") return Promise.resolve(confirm(`${title}\n\n${body}`));
     $("#confirm-title").textContent = title;
     $("#confirm-body").textContent = body;
     $("#confirm-ok").textContent = okLabel;
+    $("#confirm-ok").className = `btn btn-lg ${danger ? "btn-danger-fill" : "btn-primary"}`;
     d.returnValue = "";
     d.showModal();
     return new Promise((resolve) => d.addEventListener("close", () => resolve(d.returnValue === "ok"), { once: true }));
@@ -625,7 +626,7 @@
 
   async function runBackup(agent, folder) {
     const ok = await ask(`녹취 ${fmtInt(folder.file_count)}개를 백업하고 비울까요?`,
-      `${agent.name}님 폴더의 파일을 압축해서 보관한 뒤 폴더에서 지워요. 통화 기록은 먼저 저장돼요.`, "비우기");
+      `${agent.name}님 폴더의 파일을 압축해서 보관한 뒤 폴더에서 지워요. 통화 기록은 먼저 저장돼요.`, "비우기", true);
     if (!ok) return;
     const btn = $("#backup-btn"), msg = $("#backup-msg");
     btn.disabled = true;
@@ -899,9 +900,45 @@
     renderIngestStatus(s.last_ingest);
     const drive = s.source === "drive";
     $("#drive-card").hidden = !drive || state.user.role !== "admin";
+    $("#backup-card").hidden = !drive || state.user.role !== "admin";
+    if (drive && state.user.role === "admin") loadDriveBackup();
     $("#ingest-now").hidden = drive || state.user.role !== "admin";
     $("#ingest-card h2").textContent = drive ? "드라이브에서 받은 녹취" : "녹취 가져오기";
   }
+  // ---------- 드라이브 녹취 백업 ----------
+  async function loadDriveBackup() {
+    try { renderDriveBackup(await api("/api/drive/backup")); } catch (err) { toast(err.message); }
+  }
+  function renderDriveBackup(o) {
+    $("#backup-agents").replaceChildren(...(o.agents.length ? o.agents.map((a) => el("li", {},
+      el("span", { class: "avatar" }, a.name.slice(0, 1)),
+      el("div", { class: "main" },
+        el("div", { class: "t" }, a.name),
+        el("div", { class: "s" }, a.pending ? "백업 대기 중 · 5분 안에 처리돼요"
+          : a.waiting ? `백업 안 한 녹취 ${fmtInt(a.waiting)}개` : "모두 백업했어요")),
+      a.pending ? el("span", { class: "tag tag-wait" }, "대기 중")
+        : el("button", {
+          class: "btn btn-secondary btn-sm", disabled: !a.waiting,
+          onclick: () => requestBackup(a),
+        }, "백업하기"))) : [el("li", { class: "empty" }, "상담원이 없어요")]));
+    const label = { pending: ["대기 중", "tag-wait"], done: ["완료", "tag-done"], failed: ["실패", "tag-fail"] };
+    $("#backup-history").replaceChildren(...(o.history.length ? o.history.map((h) => el("li", {},
+      el("div", { class: "main" },
+        el("div", { class: "t" }, h.status === "pending" && !h.moved ? `${h.agent_name} · 처리 기다리는 중`
+          : `${h.agent_name} · ${fmtInt(h.moved)}개 옮김${h.failed ? ` · ${fmtInt(h.failed)}개 실패` : ""}`),
+        el("div", { class: "s" }, `${dateTimeKo(h.requested_at)} · ${h.requested_by}${h.message ? ` · ${h.message}` : ""}`)),
+      el("span", { class: `tag ${label[h.status]?.[1] || "tag-done"}` }, label[h.status]?.[0] || h.status))) : [el("li", { class: "empty" }, "아직 백업한 적이 없어요")]));
+  }
+  async function requestBackup(a) {
+    const ok = await ask(`${a.name}님 녹취 ${fmtInt(a.waiting)}개를 백업할까요?`,
+      "드라이브의 _백업 폴더로 옮겨서 상담원 폴더를 비워요. 지우지 않으니 계속 들을 수 있어요.", "백업하기");
+    if (!ok) return;
+    try {
+      renderDriveBackup(await api(`/api/agents/${a.agent_id}/backup`, { method: "POST", body: "{}" }));
+      toast("백업을 요청했어요. 5분 안에 처리돼요.");
+    } catch (err) { toast(err.message); }
+  }
+
   $("#drive-copy").addEventListener("click", async () => {
     const msg = $("#drive-msg");
     try {

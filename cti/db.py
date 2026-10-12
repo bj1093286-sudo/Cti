@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS calls (
     duration_source  TEXT,      -- 'header' | 'size'
     source_key       TEXT UNIQUE,    -- '<상담원 폴더>/<파일 경로>'의 HMAC (중복 적재 방지, 파일명에 번호가 있어 원문 미저장)
     file_bytes       INTEGER,
-    drive_file_id    TEXT             -- 구글 드라이브 파일 ID(재생용). 데모 녹취는 'demo'
+    drive_file_id    TEXT,            -- 구글 드라이브 파일 ID(재생용). 데모 녹취는 'demo'
+    archived_at      TEXT             -- 드라이브 '_백업' 폴더로 옮긴 시각(파일 ID는 그대로라 재생 가능)
 );
 CREATE INDEX IF NOT EXISTS idx_calls_started ON calls(started_at);
 CREATE INDEX IF NOT EXISTS idx_calls_agent_started ON calls(agent_id, started_at);
@@ -50,6 +51,19 @@ CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
     user_id    INTEGER NOT NULL REFERENCES users(id),
     expires_at TEXT NOT NULL
+);
+
+-- 드라이브 백업 요청: 대시보드가 쌓고, Apps Script 가 가져가 처리한 뒤 결과를 알려 준다
+CREATE TABLE IF NOT EXISTS drive_tasks (
+    id           INTEGER PRIMARY KEY,
+    agent_id     INTEGER NOT NULL REFERENCES agents(id),
+    requested_by TEXT NOT NULL,
+    requested_at TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending',  -- pending | done | failed
+    done_at      TEXT,
+    moved        INTEGER NOT NULL DEFAULT 0,
+    failed       INTEGER NOT NULL DEFAULT 0,
+    message      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS backups (
@@ -155,7 +169,7 @@ def connect(target):
 
 
 # 이미 만들어진 DB에 나중에 추가된 열: (테이블, 열, 타입)
-_ADDED_COLUMNS = [("calls", "drive_file_id", "TEXT")]
+_ADDED_COLUMNS = [("calls", "drive_file_id", "TEXT"), ("calls", "archived_at", "TEXT")]
 
 
 def _migrate(conn) -> None:

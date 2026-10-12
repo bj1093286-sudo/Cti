@@ -26,7 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth, backup, calls, dashboard, demo, ingest
+from . import auth, backup, calls, dashboard, demo, drive_backup, ingest
 from .db import connect, get_setting, get_setting_int, set_setting
 from .periods import PRESETS, resolve
 
@@ -260,10 +260,13 @@ def make_handler(cfg: Config):
             proto = self.headers.get("X-Forwarded-Proto") or ("https" if ON_VERCEL else "http")
             return f"{proto}://{self.headers.get('Host', '127.0.0.1')}"
 
-        def _drive_push(self, conn):
+        def _check_drive_token(self, conn):
             sent = self.headers.get("X-CTI-Token", "")
             if not sent or not hmac.compare_digest(sent, drive_token(conn)):
                 raise ApiError(HTTPStatus.UNAUTHORIZED, "연동 키가 맞지 않아요. 설정 화면의 스크립트를 다시 복사해 주세요.")
+
+        def _drive_push(self, conn):
+            self._check_drive_token(conn)
             body = self._read_json()
             files = body.get("files")
             if not isinstance(files, list) or len(files) > ingest.MAX_RECORDS:
@@ -290,6 +293,21 @@ def make_handler(cfg: Config):
 
             if method == "POST" and path == "/api/drive/push":
                 return self._drive_push(conn)
+            if path == "/api/drive/tasks" and method == "GET":
+                self._check_drive_token(conn)
+                return self._send_json(200, {"tasks": drive_backup.pending(conn)})
+            m = re.fullmatch(r"/api/drive/tasks/(\d+)", path)
+            if m and method == "POST":
+                self._check_drive_token(conn)
+                body = self._read_json()
+                try:
+                    t = drive_backup.report(conn, int(m.group(1)), str(body.get("status")),
+                                            body.get("moved_ids") or [], body.get("failed") or 0, body.get("message"))
+                except ValueError as e:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, str(e))
+                except LookupError as e:
+                    raise ApiError(HTTPStatus.NOT_FOUND, str(e))
+                return self._send_json(200, {"status": t["status"], "moved": t["moved"]})
 
             user = auth.user_for_token(conn, self._token())
             if user is None:
@@ -311,6 +329,10 @@ def make_handler(cfg: Config):
                         raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 변경할 수 있습니다.")
                     _save_settings(conn, self._read_json())
                 return self._send_json(200, _settings_payload(conn))
+            if method == "GET" and path == "/api/drive/backup":
+                if user["role"] != "admin":
+                    raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 볼 수 있어요.")
+                return self._send_json(200, drive_backup.overview(conn))
             if method == "GET" and path == "/api/drive/script":
                 if user["role"] != "admin":
                     raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 볼 수 있어요.")
@@ -358,6 +380,11 @@ def make_handler(cfg: Config):
                     if user["role"] != "admin":
                         raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 실행할 수 있습니다.")
                     self._read_json()  # Content-Type 강제(CSRF 완화)
+                    if SOURCE == "drive":
+                        if not conn.execute("SELECT 1 FROM agents WHERE id = ?", (agent_id,)).fetchone():
+                            raise ApiError(HTTPStatus.NOT_FOUND, "상담원을 찾을 수 없어요.")
+                        drive_backup.request(conn, agent_id, user["username"])
+                        return self._send_json(200, drive_backup.overview(conn))
                     result = backup.backup_and_clear(
                         conn, agent_id, cfg.sync_root, cfg.backup_root, user["username"])
                     return self._send_json(200, {

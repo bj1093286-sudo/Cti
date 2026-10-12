@@ -235,6 +235,14 @@
         <p class="help" style="margin-top:12px">연동 키는 비밀번호처럼 다뤄 주세요. 녹취 파일은 드라이브에 그대로 있고, 대시보드에는 목록 정보만 들어와요.</p>
       </section>
 
+      <section class="card" id="backup-card" hidden>
+        <h2>녹취 백업</h2>
+        <p class="help">상담원 폴더의 녹취를 같은 드라이브의 <b>_백업</b> 폴더로 옮겨 폴더를 비워요. 지우지 않아서 백업한 녹취도 계속 조회하고 들을 수 있어요. 누르면 5분 안에 처리돼요.</p>
+        <ul class="list" id="backup-agents"></ul>
+        <h3 class="sub-h">백업 기록</h3>
+        <ul class="list" id="backup-history"></ul>
+      </section>
+
       <section class="card" id="ingest-card">
         <h2>녹취 가져오기</h2>
         <p class="help">녹취 폴더의 <b>상담원 이름 폴더</b> 안에 있는 파일 이름에서 고객번호와 통화 시작 시각을 읽어요. 고객번호는 가운데를 가려서 저장해요.</p>
@@ -326,7 +334,7 @@
       <p id="confirm-body"></p>
       <div class="dialog-actions">
         <button value="cancel" class="btn btn-secondary btn-lg">취소</button>
-        <button value="ok" id="confirm-ok" class="btn btn-danger-fill btn-lg">확인</button>
+        <button value="ok" id="confirm-ok" class="btn btn-primary btn-lg">확인</button>
       </div>
     </form>
   </dialog>

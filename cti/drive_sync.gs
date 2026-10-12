@@ -7,6 +7,9 @@
  *     (https://drive.google.com/drive/folders/여기부분)
  *  3. 위쪽 함수 목록에서 '설치' 선택 → 실행 → 권한 허용
  *  이후 5분마다 새 녹취를 대시보드로 보냅니다. 녹취 파일 자체는 드라이브에 그대로 있어요.
+ *
+ *  대시보드에서 '백업하고 비우기'를 누르면, 다음 실행 때 그 상담원 폴더의 녹취를
+ *  같은 폴더 안 '_백업/상담원/날짜' 폴더로 옮깁니다(지우지 않음, 계속 재생 가능).
  */
 const CTI_URL = '{{CTI_URL}}';
 const CTI_TOKEN = '{{CTI_TOKEN}}';
@@ -15,6 +18,7 @@ const FOLDER_ID = '여기에_녹취_폴더_ID';
 const AUDIO = /\.(m4a|mp4|3gp|3ga|aac|mp3|wav|amr|ogg|opus|wma)$/i;
 const BATCH = 200;              // 한 번에 보내는 파일 수
 const TIME_BUDGET_MS = 270000;  // 실행 시간 제한(6분) 전에 끊고 다음 회차에 이어서
+const BACKUP_DIR = '_백업';      // 이름이 '_'로 시작하는 폴더는 상담원 폴더로 보지 않음
 
 function 설치() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
@@ -36,7 +40,7 @@ function 동기화() {
   const since = props.getProperty('since');
   const files = [];
   // 최상위 폴더 바로 아래 폴더 이름 = 상담원
-  listChildren_(FOLDER_ID.trim(), true).forEach(function (agentDir) {
+  agentFolders_().forEach(function (agentDir) {
     walk_(agentDir.id, agentDir.name, since, files);
   });
   files.sort(function (a, b) { return a.created < b.created ? -1 : 1; });
@@ -58,6 +62,62 @@ function 동기화() {
     props.setProperty('since', newest);
   }
   console.log('보낸 파일 ' + sent + ' / 찾은 파일 ' + files.length);
+  if (sent >= files.length) runBackups_(started);
+}
+
+function agentFolders_() {
+  return listChildren_(FOLDER_ID.trim(), true).filter(function (f) { return f.name.charAt(0) !== '_'; });
+}
+
+/** 대시보드에 쌓인 백업 요청 처리 */
+function runBackups_(started) {
+  const tasks = JSON.parse(call_('get', '/api/drive/tasks').getContentText()).tasks || [];
+  tasks.forEach(function (t) {
+    if (Date.now() - started > TIME_BUDGET_MS) return;  // 남은 건 다음 회차에
+    const dir = agentFolders_().filter(function (f) { return f.name === t.agent; })[0];
+    if (!dir) {
+      call_('post', '/api/drive/tasks/' + t.id, { status: 'done', moved_ids: [], message: '폴더가 없어서 옮길 파일이 없었어요' });
+      return;
+    }
+    // 1) 옮기기 전에 이 폴더의 모든 녹취를 대시보드에 적재(누락 방지)
+    const files = [];
+    walk_(dir.id, t.agent, null, files);
+    for (let i = 0; i < files.length; i += BATCH) {
+      const chunk = files.slice(i, i + BATCH);
+      chunk.forEach(function (f) { if (f.durationMs == null) f.durationMs = mp4DurationMs_(f.id, f.name); });
+      post_({ files: chunk, first: false });
+    }
+    // 2) _백업/상담원/날짜 폴더로 옮기기
+    const stamp = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HHmm');
+    const dest = ensureFolder_(ensureFolder_(ensureFolder_(DriveApp.getFolderById(FOLDER_ID.trim()), BACKUP_DIR), t.agent), stamp);
+    const moved = [];
+    let failed = 0, lastError = null, done = true;
+    for (let i = 0; i < files.length; i++) {
+      if (Date.now() - started > TIME_BUDGET_MS) { done = false; break; }
+      try { DriveApp.getFileById(files[i].id).moveTo(dest); moved.push(files[i].id); }
+      catch (e) { failed++; lastError = String(e); }
+    }
+    call_('post', '/api/drive/tasks/' + t.id, {
+      status: !done ? 'progress' : (failed && !moved.length ? 'failed' : 'done'),
+      moved_ids: moved, failed: failed,
+      message: lastError ? '옮기지 못한 파일 ' + failed + '개: ' + lastError.slice(0, 200) : null,
+    });
+  });
+}
+
+function ensureFolder_(parent, name) {
+  const it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
+}
+
+function call_(method, path, body) {
+  const opt = { method: method, headers: { 'X-CTI-Token': CTI_TOKEN }, muteHttpExceptions: true };
+  if (body) { opt.contentType = 'application/json'; opt.payload = JSON.stringify(body); }
+  const res = UrlFetchApp.fetch(CTI_URL.replace(/\/$/, '') + path, opt);
+  if (res.getResponseCode() !== 200) {
+    throw new Error('대시보드 요청 실패 (' + res.getResponseCode() + '): ' + res.getContentText());
+  }
+  return res;
 }
 
 function walk_(folderId, agent, since, out) {
@@ -132,11 +192,5 @@ function parseMvhd_(b) {
 }
 
 function post_(body) {
-  const res = UrlFetchApp.fetch(CTI_URL.replace(/\/$/, '') + '/api/drive/push', {
-    method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
-    headers: { 'X-CTI-Token': CTI_TOKEN }, muteHttpExceptions: true,
-  });
-  if (res.getResponseCode() !== 200) {
-    throw new Error('대시보드 전송 실패 (' + res.getResponseCode() + '): ' + res.getContentText());
-  }
+  call_('post', '/api/drive/push', body);
 }
