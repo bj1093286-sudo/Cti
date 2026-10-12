@@ -59,7 +59,9 @@ class Config:
     def from_env(cls) -> "Config":
         # Vercel 은 /tmp 만 쓸 수 있고 인스턴스가 바뀌면 지워진다 → 영구 DB(DATABASE_URL) 연결 전까지는 데모 모드
         data = Path("/tmp/cti") if ON_VERCEL else ROOT / "data"
-        db_url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or None
+        # Vercel 의 Neon 연결 시 붙는 이름(접두어에 따라 DATABASE_URL / STORAGE_URL / POSTGRES_URL)
+        db_url = next((os.environ[k] for k in ("DATABASE_URL", "STORAGE_URL", "POSTGRES_URL")
+                       if os.environ.get(k, "").startswith(("postgres://", "postgresql://"))), None)
         demo_default = "1" if ON_VERCEL and not db_url else "0"
         return cls(
             Path(os.environ.get("CTI_DB", data / "cti.db")),
