@@ -618,9 +618,11 @@
     msg.className = "small"; msg.textContent = "백업 중…";
     try {
       const r = await api(`/api/agents/${agent.id}/backup`, { method: "POST", body: "{}" });
-      msg.className = "small ok";
       const b = r.backup;
-      const notes = [`완료: ${fmtInt(b.file_count)}개 파일(${fmtBytes(b.total_bytes)})을 백업하고 폴더를 비웠습니다.`];
+      msg.className = b.delete_failed ? "small err" : "small ok";
+      const notes = b.delete_failed
+        ? [`${fmtInt(b.file_count)}개 파일을 백업했지만 ${fmtInt(b.delete_failed)}개는 지우지 못했습니다(삭제 권한 확인 필요). 백업 파일은 안전하게 저장되었습니다.`]
+        : [`완료: ${fmtInt(b.file_count)}개 파일(${fmtBytes(b.total_bytes)})을 백업하고 폴더를 비웠습니다.`];
       if (b.ingested) notes.push(`새 통화 ${fmtInt(b.ingested)}건을 먼저 기록했습니다.`);
       if (b.left_recent) notes.push(`동기화 중인 파일 ${fmtInt(b.left_recent)}개는 남겨 두었습니다.`);
       if (b.unparsed) notes.push(`파일 이름을 해석하지 못한 ${fmtInt(b.unparsed)}개는 통화로 기록되지 않고 백업만 되었습니다.`);

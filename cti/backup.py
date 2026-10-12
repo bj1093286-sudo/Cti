@@ -112,8 +112,14 @@ def backup_and_clear(conn: sqlite3.Connection, agent_id: int, sync_root: Path,
             archive.unlink(missing_ok=True)
             raise
 
+        # 구글 드라이브 공유 폴더는 '콘텐츠 관리자' 권한이 없으면 삭제가 거부된다.
+        # 백업 zip은 이미 검증됐으므로 실패한 파일만 남기고 이력은 기록한다.
+        delete_failed = 0
         for f in files:
-            f.unlink()
+            try:
+                f.unlink()
+            except OSError:
+                delete_failed += 1
         # 비어 있는 하위 폴더 정리(루트 폴더는 유지)
         for d in sorted((d for d in folder.rglob("*") if d.is_dir()), key=lambda p: len(p.parts),
                         reverse=True):
@@ -133,6 +139,7 @@ def backup_and_clear(conn: sqlite3.Connection, agent_id: int, sync_root: Path,
         conn.commit()
         return {"id": cur.lastrowid, "created_at": created, "archive_path": str(archive),
                 "file_count": len(files), "total_bytes": total, "performed_by": performed_by,
-                "ingested": ingested["added"], "unparsed": len(ingested["failed"]), "left_recent": recent}
+                "ingested": ingested["added"], "unparsed": len(ingested["failed"]), "left_recent": recent,
+                "delete_failed": delete_failed}
     finally:
         lock.release()

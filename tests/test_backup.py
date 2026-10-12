@@ -59,6 +59,15 @@ class BackupTest(unittest.TestCase):
         self.assertTrue(fresh.exists())
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0], 1)
 
+    def test_delete_permission_denied_still_records_backup(self):
+        from unittest import mock
+        with mock.patch.object(Path, "unlink", side_effect=PermissionError("denied")):
+            r = backup.backup_and_clear(self.conn, 1, self.sync, self.bak, "admin")
+        self.assertEqual((r["file_count"], r["delete_failed"]), (2, 2))
+        self.assertTrue(Path(r["archive_path"]).exists())
+        self.assertTrue(self.a.exists())
+        self.assertEqual(len(backup.history(self.conn, 1)), 1)
+
     def test_folder_status(self):
         s = backup.folder_status(self.conn, 1, self.sync)
         self.assertEqual(s["file_count"], 2)
