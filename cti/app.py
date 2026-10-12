@@ -13,6 +13,7 @@ import json
 import mimetypes
 import os
 import re
+import socket
 import sqlite3
 import threading
 import time
@@ -194,7 +195,11 @@ def make_handler(cfg: Config):
         def _api(self, method: str, path: str, q: dict, conn: sqlite3.Connection):
             if method == "POST" and path == "/api/login":
                 body = self._read_json()
-                token = auth.login(conn, str(body.get("username", "")), str(body.get("password", "")))
+                try:
+                    token = auth.login(conn, str(body.get("username", "")), str(body.get("password", "")))
+                except auth.LoginLocked:
+                    raise ApiError(HTTPStatus.TOO_MANY_REQUESTS,
+                                   "비밀번호를 여러 번 틀려 5분 동안 로그인할 수 없습니다.")
                 if not token:
                     raise ApiError(HTTPStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.")
                 user = auth.user_for_token(conn, token)
@@ -276,6 +281,23 @@ def _ingest_loop(cfg: Config, interval: int) -> None:
         time.sleep(interval)
 
 
+def _local_ips() -> list[str]:
+    """이 컴퓨터의 IPv4 주소(같은 와이파이, Tailscale 100.x 포함)."""
+    ips: set[str] = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
+    except OSError:
+        pass
+    try:  # 기본 경로의 주소(패킷은 보내지 않음)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))
+            ips.add(s.getsockname()[0])
+    except OSError:
+        pass
+    return sorted(ip for ip in ips if not ip.startswith("127."))
+
+
 def main() -> None:
     cfg = Config.from_env()
     host = os.environ.get("CTI_HOST", "127.0.0.1")
@@ -284,7 +306,10 @@ def main() -> None:
     httpd = ThreadingHTTPServer((host, port), make_handler(cfg))
     if interval > 0:
         threading.Thread(target=_ingest_loop, args=(cfg, interval), daemon=True).start()
-    print(f"CTI 대시보드: http://{host}:{port}  (DB: {cfg.db_path}, 녹취 폴더: {cfg.sync_root})")
+    print(f"CTI 대시보드: http://127.0.0.1:{port}  (DB: {cfg.db_path}, 녹취 폴더: {cfg.sync_root})")
+    if host in ("0.0.0.0", ""):
+        for ip in _local_ips():
+            print(f"  휴대폰·다른 컴퓨터에서: http://{ip}:{port}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

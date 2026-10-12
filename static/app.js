@@ -363,6 +363,11 @@
 
   // ---------- 차트 공통 ----------
   const charts = {};
+  const FONT = '"Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif';
+  if (window.Chart) Chart.defaults.font.family = FONT;
+  // 웹 글꼴이 늦게 도착하면 차트(캔버스)를 다시 그려 글꼴을 맞춘다
+  if (document.fonts) document.fonts.ready.then(() => { if (state.data && !$("#dashboard-view").hidden) render(); });
+
   function baseOptions() {
     const grid = css("--grid"), muted = css("--muted"), axis = css("--axis");
     return {

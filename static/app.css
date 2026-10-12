@@ -17,7 +17,8 @@
   /* 히트맵용 브랜드 블루 순차 램프(100→700) */
   --seq-0: transparent;
   --radius: 10px;
-  font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  /* 인터넷이 안 되면 맑은 고딕 등 시스템 글꼴로 대체 */
+  font-family: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -51,6 +52,7 @@
 }
 
 * { box-sizing: border-box; }
+button, input, select { font-family: inherit; }
 body { margin: 0; background: var(--page); color: var(--ink); font-size: 14px; }
 [hidden] { display: none !important; }
 h1 { font-size: 20px; margin: 0 0 16px; }
@@ -73,7 +75,8 @@ h3 { font-size: 13px; margin: 20px 0 8px; color: var(--ink-2); font-weight: 600;
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 .card + .card, .grid-2 + .card, .kpis + .grid-2 { margin-top: 16px; }
-.card-head { display: flex; align-items: baseline; gap: 12px; justify-content: space-between; margin-bottom: 12px; }
+.card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; justify-content: space-between; margin-bottom: 12px; }
+.card-head h2 { white-space: nowrap; }
 
 /* 설정 */
 .settings-card { max-width: 560px; display: grid; gap: 12px; }

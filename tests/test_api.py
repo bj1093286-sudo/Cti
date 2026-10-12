@@ -66,6 +66,16 @@ class ApiTest(unittest.TestCase):
 
     def test_bad_login(self):
         self.assertEqual(self.req("POST", "/api/login", {"username": "admin", "password": "x"})[0], 401)
+        auth._fails.clear()
+
+    def test_login_lockout(self):
+        try:
+            for _ in range(auth.MAX_FAILS):
+                self.assertEqual(self.req("POST", "/api/login", {"username": "viewer", "password": "x"})[0], 401)
+            # 잠긴 뒤에는 맞는 비밀번호도 거부
+            self.assertEqual(self.req("POST", "/api/login", {"username": "viewer", "password": "pw-viewer"})[0], 429)
+        finally:
+            auth._fails.clear()
 
     def test_dashboard(self):
         t = self.login("viewer", "pw-viewer")
