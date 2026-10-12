@@ -195,7 +195,7 @@ def drive_sync_now(conn) -> dict:
         if isinstance(getattr(e, "reason", None), TimeoutError):
             return {"ok": True, "pending": True}
         raise ApiError(HTTPStatus.BAD_GATEWAY,
-                       "구글 스크립트를 부르지 못했어요. 웹 앱 배포의 액세스를 '모든 사용자'로 했는지 확인해 주세요.")
+                       "서버에서 구글 스크립트를 바로 부를 수 없어요(회사 계정 전용 배포). 새 탭에서 동기화할게요.")
     if not data.get("ok"):
         raise ApiError(HTTPStatus.CONFLICT if data.get("busy") else HTTPStatus.BAD_GATEWAY,
                        data.get("error") or "동기화에 실패했어요.")
