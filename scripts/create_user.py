@@ -36,7 +36,7 @@ def main() -> int:
 
     cfg = Config.from_env()
     cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = connect(cfg.db_path)
+    conn = connect(cfg.db_target)
     has_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0
     if args.if_none and has_users:
         return 0

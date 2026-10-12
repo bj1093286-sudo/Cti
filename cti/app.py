@@ -38,30 +38,38 @@ ON_VERCEL = bool(os.environ.get("VERCEL"))
 
 class Config:
     def __init__(self, db_path: Path, sync_root: Path, backup_root: Path, today=date.today,
-                 demo: bool = False):
+                 demo: bool = False, db_url: str | None = None):
         self.db_path = db_path
+        self.db_url = db_url  # 있으면 Postgres 사용(Vercel 등)
         self.sync_root = sync_root
         self.backup_root = backup_root
         self.today = today
         self.demo = demo  # 가짜 데이터로 채운 화면 확인용 모드
 
+    @property
+    def db_target(self):
+        return self.db_url or self.db_path
+
     @classmethod
     def from_env(cls) -> "Config":
-        # Vercel 은 /tmp 만 쓸 수 있고 인스턴스가 바뀌면 지워진다 → 영구 DB 연결 전까지는 데모 모드
+        # Vercel 은 /tmp 만 쓸 수 있고 인스턴스가 바뀌면 지워진다 → 영구 DB(DATABASE_URL) 연결 전까지는 데모 모드
         data = Path("/tmp/cti") if ON_VERCEL else ROOT / "data"
-        demo_default = "1" if ON_VERCEL else "0"
+        db_url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or None
+        demo_default = "1" if ON_VERCEL and not db_url else "0"
         return cls(
             Path(os.environ.get("CTI_DB", data / "cti.db")),
             Path(os.environ.get("CTI_SYNC_ROOT", data / "sync")),
             Path(os.environ.get("CTI_BACKUP_ROOT", data / "backup")),
             demo=os.environ.get("CTI_DEMO", demo_default) == "1",
+            db_url=db_url,
         )
 
 
 def bootstrap(cfg: Config) -> None:
     """서버 시작 시 준비: 스키마, (데모 모드면) 가짜 데이터, 관리자 계정."""
-    cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = connect(cfg.db_path)
+    if not cfg.db_url:
+        cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = connect(cfg.db_target)
     try:
         if cfg.demo and conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0:
             demo.seed(conn)
@@ -133,8 +141,9 @@ def _settings_payload(conn: sqlite3.Connection) -> dict:
 
 
 def make_handler(cfg: Config):
-    cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
-    connect(cfg.db_path).close()  # 스키마 초기화
+    if not cfg.db_url:
+        cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
+    connect(cfg.db_target).close()  # 스키마 초기화
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "CTIDashboard/1.0"
@@ -176,7 +185,7 @@ def make_handler(cfg: Config):
                 if method != "GET":
                     raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, "허용되지 않는 메서드")
                 return self._static(url.path)
-            conn = connect(cfg.db_path)
+            conn = connect(cfg.db_target)
             try:
                 return self._api(method, url.path, q, conn)
             finally:
@@ -297,7 +306,7 @@ def _ingest_loop(cfg: Config, interval: int) -> None:
     """동기화 폴더를 주기적으로 읽어 새 녹취 파일을 적재한다."""
     while True:
         try:
-            conn = connect(cfg.db_path)
+            conn = connect(cfg.db_target)
             try:
                 s = ingest.ingest_all(conn, cfg.sync_root)
             finally:

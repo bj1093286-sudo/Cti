@@ -24,11 +24,11 @@ def main() -> None:
 
     cfg = Config.from_env()
     cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
-    if args.reset:
+    if args.reset and not cfg.db_url:
         cfg.db_path.unlink(missing_ok=True)
         shutil.rmtree(cfg.sync_root, ignore_errors=True)
         shutil.rmtree(cfg.backup_root, ignore_errors=True)
-    conn = connect(cfg.db_path)
+    conn = connect(cfg.db_target)
     r = demo.seed(conn, cfg.sync_root, args.days)
     demo.create_demo_users(conn)
     print(f"상담원 {r['agents']}명, 통화 {r['calls']}건(녹취 파일 {r['files']}개 포함)")

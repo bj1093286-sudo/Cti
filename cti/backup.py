@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import ingest
+from .db import insert_returning_id
 
 _locks: dict[int, threading.Lock] = {}
 _locks_guard = threading.Lock()
@@ -129,7 +130,8 @@ def backup_and_clear(conn: sqlite3.Connection, agent_id: int, sync_root: Path,
                 pass
 
         created = datetime.now().isoformat(sep=" ", timespec="seconds")
-        cur = conn.execute(
+        backup_id = insert_returning_id(
+            conn,
             """
             INSERT INTO backups(agent_id, created_at, archive_path, file_count, total_bytes, performed_by)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -137,7 +139,7 @@ def backup_and_clear(conn: sqlite3.Connection, agent_id: int, sync_root: Path,
             (agent_id, created, str(archive), len(files), total, performed_by),
         )
         conn.commit()
-        return {"id": cur.lastrowid, "created_at": created, "archive_path": str(archive),
+        return {"id": backup_id, "created_at": created, "archive_path": str(archive),
                 "file_count": len(files), "total_bytes": total, "performed_by": performed_by,
                 "ingested": ingested["added"], "unparsed": len(ingested["failed"]), "left_recent": recent,
                 "delete_failed": delete_failed}

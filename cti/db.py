@@ -1,8 +1,10 @@
 """SQLite 스키마와 연결."""
 from __future__ import annotations
 
+import re
 import secrets
 import sqlite3
+import threading
 from pathlib import Path
 
 SCHEMA = """
@@ -66,18 +68,104 @@ DEFAULT_SETTINGS = {
 }
 
 
-def connect(path: str | Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path), check_same_thread=False)
+class Row(dict):
+    """이름(row["id"])과 순서(row[0]) 둘 다로 꺼낼 수 있는 행 — sqlite3.Row 와 같은 사용법."""
+    __slots__ = ("_values",)
+
+    def __init__(self, keys, values):
+        super().__init__(zip(keys, values))
+        self._values = values
+
+    def __getitem__(self, k):
+        return self._values[k] if isinstance(k, int) else dict.__getitem__(self, k)
+
+
+def _pg_sql(sql: str) -> str:
+    """SQLite 문법을 Postgres 로: ? → %s, INSERT OR IGNORE → ON CONFLICT DO NOTHING."""
+    sql = sql.replace("%", "%%").replace("?", "%s")
+    if re.match(r"\s*INSERT OR IGNORE", sql, re.I):
+        sql = re.sub(r"INSERT OR IGNORE", "INSERT", sql, count=1, flags=re.I).rstrip().rstrip(";")
+        sql += " ON CONFLICT DO NOTHING"
+    return sql
+
+
+class PgConnection:
+    """psycopg 연결을 sqlite3.Connection 처럼 쓰게 하는 얇은 래퍼."""
+    is_pg = True
+
+    def __init__(self, url: str):
+        import psycopg
+        from psycopg.types.numeric import FloatLoader
+
+        def row_factory(cursor):
+            keys = [d.name for d in cursor.description] if cursor.description else []
+            return lambda values: Row(keys, values)
+
+        self._c = psycopg.connect(url, row_factory=row_factory, prepare_threshold=None)
+        self._c.adapters.register_loader("numeric", FloatLoader)  # AVG() 결과를 float 로
+
+    def execute(self, sql: str, params=()):
+        return self._c.execute(_pg_sql(sql), tuple(params) or None)
+
+    def executemany(self, sql: str, seq):
+        with self._c.cursor() as cur:
+            cur.executemany(_pg_sql(sql), list(seq))
+
+    def executescript(self, script: str):
+        self._c.execute(script)
+
+    def commit(self):
+        self._c.commit()
+
+    def rollback(self):
+        self._c.rollback()
+
+    def close(self):
+        self._c.close()
+
+
+def _pg_schema() -> str:
+    return re.sub(r"(\bid\s+)INTEGER PRIMARY KEY", r"\1BIGSERIAL PRIMARY KEY", SCHEMA)
+
+
+_pg_ready: set[str] = set()
+_pg_ready_lock = threading.Lock()
+
+
+def is_url(target) -> bool:
+    return isinstance(target, str) and target.startswith(("postgres://", "postgresql://"))
+
+
+def connect(target):
+    """target 이 postgres:// URL 이면 Postgres(Vercel 등), 아니면 SQLite 파일 경로."""
+    if is_url(target):
+        conn = PgConnection(target)
+        with _pg_ready_lock:
+            if target not in _pg_ready:
+                _init(conn, _pg_schema())
+                _pg_ready.add(target)
+        return conn
+    conn = sqlite3.connect(str(target), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(SCHEMA)
+    _init(conn, SCHEMA)
+    return conn
+
+
+def _init(conn, schema: str) -> None:
+    conn.executescript(schema)
     for k, v in DEFAULT_SETTINGS.items():
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))
     # 전화번호 해시용 비밀키 — DB마다 한 번 생성. API로 노출하지 않는다.
     conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES ('customer_hash_key', ?)",
                  (secrets.token_hex(32),))
     conn.commit()
-    return conn
+
+
+def insert_returning_id(conn, sql: str, params=()) -> int:
+    if getattr(conn, "is_pg", False):
+        return conn.execute(sql.rstrip().rstrip(";") + " RETURNING id", params).fetchone()[0]
+    return conn.execute(sql, params).lastrowid
 
 
 def get_setting(conn: sqlite3.Connection, key: str) -> str | None:

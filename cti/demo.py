@@ -36,9 +36,10 @@ def seed(conn: sqlite3.Connection, sync_root: Path | None = None, days: int = 70
 
     for name, ext in AGENTS:
         conn.execute("INSERT OR IGNORE INTO agents(name, extension, sync_dir) VALUES (?, ?, ?)", (name, ext, name))
-    agents = {r["sync_dir"]: r["id"] for r in conn.execute("SELECT id, sync_dir FROM agents")}
+    agents = {r["sync_dir"]: r["id"] for r in conn.execute("SELECT id, sync_dir FROM agents ORDER BY id")}
     skill = {a: rnd.uniform(0.7, 1.3) for a in agents}
     phones = [f"010{rnd.randint(10000000, 99999999)}" for _ in range(900)]
+    hk = ingest.hash_key(conn)
 
     # 1) 과거 통화(오늘 파일로 만들 몫은 제외)
     conn.execute("DELETE FROM calls")
@@ -65,7 +66,7 @@ def seed(conn: sqlite3.Connection, sync_root: Path | None = None, days: int = 70
                 file_calls[folder] = day_calls[-FILES_PER_AGENT:]
                 day_calls = day_calls[:-FILES_PER_AGENT]
             for ts, phone, dur in day_calls:
-                rows.append((aid, ingest.customer_key(conn, phone), f"{phone[:3]}-****-{phone[-4:]}",
+                rows.append((aid, ingest.customer_key(hk, phone), f"{phone[:3]}-****-{phone[-4:]}",
                              ts.isoformat(sep=" "), dur))
     conn.executemany(
         "INSERT INTO calls(agent_id, customer_key, customer_masked, started_at, duration_sec, duration_source) "
