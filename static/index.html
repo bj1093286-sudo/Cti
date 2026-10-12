@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400..800&display=swap">
   <title>미소 통화 녹취</title>
-  <link rel="stylesheet" href="/static/app.css?v=20261012-1">
+  <link rel="stylesheet" href="/static/app.css?v=20261012-2">
   <script src="/static/vendor/chart.umd.js?v=4.4.1"></script>
 </head>
 <body>
@@ -25,8 +25,8 @@
     <form id="login-form" class="login-form" novalidate>
       <div class="login-head">
         <img class="logo" src="/static/brand/icon-192.png" alt="미소" width="56" height="56">
-        <h1>미소 통화 녹취</h1>
-        <p class="sub">아이디와 비밀번호를 입력해 주세요</p>
+        <h1 id="login-title">미소 통화 녹취</h1>
+        <p class="sub" id="login-sub">아이디와 비밀번호를 입력해 주세요</p>
       </div>
       <label class="input">
         <span>아이디</span>
@@ -36,8 +36,13 @@
         <span>비밀번호</span>
         <input name="password" type="password" autocomplete="current-password" required>
       </label>
+      <label class="input" id="password2-row" hidden>
+        <span>비밀번호 한 번 더</span>
+        <input name="password2" type="password" autocomplete="new-password">
+      </label>
       <p id="login-error" class="form-error" role="alert"></p>
-      <button type="submit" class="btn btn-primary btn-lg btn-block">로그인</button>
+      <button type="submit" id="login-btn" class="btn btn-primary btn-lg btn-block">로그인</button>
+      <p id="storage-status" class="storage-status"></p>
     </form>
   </section>
 
@@ -344,6 +349,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="/static/app.js?v=20261012-1"></script>
+  <script src="/static/app.js?v=20261012-2"></script>
 </body>
 </html>

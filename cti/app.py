@@ -154,6 +154,10 @@ def _save_settings(conn: sqlite3.Connection, body: dict) -> None:
     conn.commit()
 
 
+def _user_count(conn) -> int:
+    return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
 def drive_token(conn) -> str:
     """Apps Script 가 /api/drive/push 에 보낼 연동 키(DB마다 한 번 생성)."""
     tok = get_setting(conn, "drive_push_token")
@@ -280,6 +284,13 @@ def make_handler(cfg: Config):
             s = ingest.ingest_records(conn, [f for f in files if isinstance(f, dict)], bool(body.get("first", True)))
             return self._send_json(200, {"added": s["added"], "already": s["already"]})
 
+        def _login_response(self, conn, token: str):
+            user = {**auth.user_for_token(conn, token), "demo": cfg.demo}
+            cookie = f"{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200"
+            if self.headers.get("X-Forwarded-Proto") == "https":
+                cookie += "; Secure"
+            return self._send_json(200, user, {"Set-Cookie": cookie})
+
         # ---- API ----
         def _api(self, method: str, path: str, q: dict, conn: sqlite3.Connection):
             if method == "POST" and path == "/api/login":
@@ -291,11 +302,26 @@ def make_handler(cfg: Config):
                                    "비밀번호를 여러 번 틀려 5분 동안 로그인할 수 없습니다.")
                 if not token:
                     raise ApiError(HTTPStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.")
-                user = {**auth.user_for_token(conn, token), "demo": cfg.demo}
-                cookie = f"{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200"
-                if self.headers.get("X-Forwarded-Proto") == "https":
-                    cookie += "; Secure"
-                return self._send_json(200, user, {"Set-Cookie": cookie})
+                return self._login_response(conn, token)
+
+            if method == "GET" and path == "/api/status":
+                return self._send_json(200, {
+                    "storage": "permanent" if cfg.db_url else ("temporary" if ON_VERCEL else "local"),
+                    "demo": cfg.demo,
+                    "needs_setup": _user_count(conn) == 0,
+                })
+            if method == "POST" and path == "/api/setup":
+                # 계정이 하나도 없을 때만: 첫 관리자 계정을 화면에서 만든다
+                body = self._read_json()
+                name, pw = str(body.get("username", "")).strip(), str(body.get("password", ""))
+                if _user_count(conn) > 0:
+                    raise ApiError(HTTPStatus.CONFLICT, "이미 관리자 계정이 있어요. 로그인해 주세요.")
+                if not 2 <= len(name) <= 32 or not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "아이디는 영문·숫자 2~32자로 정해 주세요.")
+                if len(pw) < 8:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "비밀번호는 8자 이상으로 정해 주세요.")
+                auth.create_user(conn, name, pw, "admin")
+                return self._login_response(conn, auth.login(conn, name, pw))
 
             if method == "POST" and path == "/api/drive/push":
                 return self._drive_push(conn)

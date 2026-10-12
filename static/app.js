@@ -139,11 +139,25 @@
   };
 
   // ---------- 로그인 ----------
-  function showLogin() {
+  let setupMode = false;
+  async function showLogin() {
     $("#app-view").hidden = true;
     $("#login-view").hidden = false;
     closeSheet();
     setTimeout(() => $("#login-form [name=username]").focus(), 0);
+    try {
+      const st = await api("/api/status");
+      setupMode = st.needs_setup;
+      const s = $("#storage-status");
+      s.className = `storage-status ${st.storage === "temporary" ? "temp" : "ok"}`;
+      s.textContent = st.storage === "permanent" ? "저장소 연결됨"
+        : st.storage === "temporary" ? "임시 저장소 · 데모 데이터" : "이 컴퓨터에 저장 중";
+    } catch { setupMode = false; }
+    $("#login-title").textContent = setupMode ? "처음이시네요" : "미소 통화 녹취";
+    $("#login-sub").textContent = setupMode ? "저장소가 연결됐어요. 관리자 아이디와 비밀번호를 정해 주세요." : "아이디와 비밀번호를 입력해 주세요";
+    $("#password2-row").hidden = !setupMode;
+    $("#login-btn").textContent = setupMode ? "관리자 계정 만들고 시작하기" : "로그인";
+    $("#login-form [name=password]").autocomplete = setupMode ? "new-password" : "current-password";
   }
   $("#login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -151,10 +165,13 @@
     const err = $("#login-error");
     err.textContent = "";
     if (!f.username || !f.password) { err.textContent = "아이디와 비밀번호를 모두 입력해 주세요."; return; }
+    if (setupMode && f.password !== f.password2) { err.textContent = "두 비밀번호가 달라요."; return; }
     const btn = e.target.querySelector("button[type=submit]");
     btn.disabled = true;
     try {
-      state.user = await api("/api/login", { method: "POST", body: JSON.stringify(f) });
+      state.user = await api(setupMode ? "/api/setup" : "/api/login",
+        { method: "POST", body: JSON.stringify({ username: f.username, password: f.password }) });
+      setupMode = false;
       e.target.reset();
       await startApp();
     } catch (ex) {

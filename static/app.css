@@ -92,6 +92,11 @@ h1, h2, h3, p { margin: 0; }
 }
 .input input:focus { border-color: var(--blue); background: var(--card); }
 .form-error { color: var(--danger); font-size: 14px; min-height: 20px; }
+.storage-status { text-align: center; font-size: 13px; color: var(--text-3); margin-top: 8px; display: flex; justify-content: center; align-items: center; gap: 6px; }
+.storage-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--text-4); }
+.storage-status.ok::before { background: var(--ok); }
+.storage-status.temp::before { background: #ff9f1c; }
+.storage-status:empty { display: none; }
 
 /* ---------- 상단 바 ---------- */
 .topbar {
