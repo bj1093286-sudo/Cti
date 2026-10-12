@@ -36,6 +36,13 @@ function 전체다시보내기() {
 
 function 동기화() {
   const started = Date.now();
+  // 1) 대시보드에서 누른 백업 요청부터 처리(오래 기다리지 않게)
+  try { runBackups_(started); } catch (e) { console.error('백업 처리 중 오류: ' + e); }
+  // 2) 새 녹취 보내기
+  syncNew_(started);
+}
+
+function syncNew_(started) {
   const props = PropertiesService.getScriptProperties();
   const since = props.getProperty('since');
   const files = [];
@@ -62,45 +69,56 @@ function 동기화() {
     props.setProperty('since', newest);
   }
   console.log('보낸 파일 ' + sent + ' / 찾은 파일 ' + files.length);
-  if (sent >= files.length) runBackups_(started);
 }
 
 function agentFolders_() {
   return listChildren_(FOLDER_ID.trim(), true).filter(function (f) { return f.name.charAt(0) !== '_'; });
 }
 
+const BACKUP_BUDGET_MS = 200000;  // 백업에 쓰는 시간(나머지는 새 녹취 보내기)
+
 /** 대시보드에 쌓인 백업 요청 처리 */
 function runBackups_(started) {
   const tasks = JSON.parse(call_('get', '/api/drive/tasks').getContentText()).tasks || [];
+  if (tasks.length) console.log('백업 요청 ' + tasks.length + '건');
   tasks.forEach(function (t) {
-    if (Date.now() - started > TIME_BUDGET_MS) return;  // 남은 건 다음 회차에
-    const dir = agentFolders_().filter(function (f) { return f.name === t.agent; })[0];
-    if (!dir) {
-      call_('post', '/api/drive/tasks/' + t.id, { status: 'done', moved_ids: [], message: '폴더가 없어서 옮길 파일이 없었어요' });
-      return;
+    if (Date.now() - started > BACKUP_BUDGET_MS) return;  // 남은 건 다음 회차에
+    try {
+      backupOne_(t, started);
+    } catch (e) {
+      console.error(t.agent + ' 백업 실패: ' + e);
+      try {
+        call_('post', '/api/drive/tasks/' + t.id, { status: 'failed', moved_ids: [], message: String(e).slice(0, 200) });
+      } catch (e2) { /* 다음 회차에 다시 */ }
     }
-    // 1) 옮기기 전에 이 폴더의 모든 녹취를 대시보드에 적재(누락 방지)
-    const files = [];
-    walk_(dir.id, t.agent, null, files);
-    for (let i = 0; i < files.length; i += BATCH) {
-      const chunk = files.slice(i, i + BATCH);
-      chunk.forEach(function (f) { if (f.durationMs == null) f.durationMs = mp4DurationMs_(f.id, f.name); });
-      post_({ files: chunk, first: false });
-    }
-    // 2) _백업/상담원 폴더로 옮기기
-    const dest = ensureFolder_(ensureFolder_(DriveApp.getFolderById(FOLDER_ID.trim()), BACKUP_DIR), t.agent);
-    const moved = [];
-    let failed = 0, lastError = null, done = true;
-    for (let i = 0; i < files.length; i++) {
-      if (Date.now() - started > TIME_BUDGET_MS) { done = false; break; }
-      try { DriveApp.getFileById(files[i].id).moveTo(dest); moved.push(files[i].id); }
-      catch (e) { failed++; lastError = String(e); }
-    }
-    call_('post', '/api/drive/tasks/' + t.id, {
-      status: !done ? 'progress' : (failed && !moved.length ? 'failed' : 'done'),
-      moved_ids: moved, failed: failed,
-      message: lastError ? '옮기지 못한 파일 ' + failed + '개: ' + lastError.slice(0, 200) : null,
-    });
+  });
+}
+
+function backupOne_(t, started) {
+  const dir = agentFolders_().filter(function (f) { return f.name === t.agent; })[0];
+  if (!dir) {
+    call_('post', '/api/drive/tasks/' + t.id, { status: 'done', moved_ids: [], message: '폴더가 없어서 옮길 파일이 없었어요' });
+    return;
+  }
+  // 1) 옮기기 전에 이 폴더의 녹취를 대시보드에 적재(누락 방지 — 이미 있는 건 대시보드가 건너뜀).
+  //    빠르게 하려고 길이는 드라이브가 알려 준 값만 쓴다(없으면 대시보드가 용량으로 추정).
+  const files = [];
+  walk_(dir.id, t.agent, null, files);
+  for (let i = 0; i < files.length; i += BATCH) post_({ files: files.slice(i, i + BATCH), first: false });
+  // 2) _백업/상담원 폴더로 옮기기
+  const dest = ensureFolder_(ensureFolder_(DriveApp.getFolderById(FOLDER_ID.trim()), BACKUP_DIR), t.agent);
+  const moved = [];
+  let failed = 0, lastError = null, done = true;
+  for (let i = 0; i < files.length; i++) {
+    if (Date.now() - started > BACKUP_BUDGET_MS) { done = false; break; }
+    try { DriveApp.getFileById(files[i].id).moveTo(dest); moved.push(files[i].id); }
+    catch (e) { failed++; lastError = String(e); }
+  }
+  console.log(t.agent + ': ' + moved.length + '개 옮김' + (failed ? ', ' + failed + '개 실패' : '') + (done ? '' : ' (다음 회차에 이어서)'));
+  call_('post', '/api/drive/tasks/' + t.id, {
+    status: !done ? 'progress' : (failed && !moved.length ? 'failed' : 'done'),
+    moved_ids: moved, failed: failed,
+    message: lastError ? '옮기지 못한 파일 ' + failed + '개: ' + lastError.slice(0, 200) : null,
   });
 }
 
