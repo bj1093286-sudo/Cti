@@ -1,7 +1,7 @@
 /* ============================================================
    통화 대시보드 — 디자인 규칙
    토스·당근·미소 계열: 회색 바탕 위 흰 카드, 큰 숫자, 선 대신 여백,
-   색은 블루 하나 + 증감(한국식: 증가 빨강, 감소 파랑)
+   색은 블루 하나 + 증감(한국식: 증가 빨강, 감소 파랑). 라이트 모드만 지원.
    ============================================================ */
 :root {
   color-scheme: light;
@@ -37,46 +37,6 @@
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #101013;
-    --card: #1b1b21;
-    --text: #f2f4f6;
-    --text-2: #c3c8cf;
-    --text-3: #8b95a1;
-    --text-4: #5b636d;
-    --line: #2c2c35;
-    --fill: #26262e;
-    --fill-2: #33333d;
-    --blue-press: #4593fc;
-    --blue-weak: rgba(49, 130, 246, 0.16);
-    --blue-text: #64a8ff;
-    --up: #ff6b78;
-    --up-weak: rgba(240, 68, 82, 0.16);
-    --down: #64a8ff;
-    --down-weak: rgba(49, 130, 246, 0.16);
-    --danger: #ff6b78;
-    --danger-weak: rgba(240, 68, 82, 0.16);
-    --warn-text: #ffb35c;
-    --warn-weak: rgba(255, 159, 28, 0.14);
-    --ok: #2fd18a;
-    --chart-grid: #26262e;
-    --shadow: none;
-    --sheet-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
-    --heat-ink: #0b1a33;
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #101013; --card: #1b1b21; --text: #f2f4f6; --text-2: #c3c8cf; --text-3: #8b95a1; --text-4: #5b636d;
-  --line: #2c2c35; --fill: #26262e; --fill-2: #33333d; --blue-press: #4593fc; --blue-weak: rgba(49, 130, 246, 0.16);
-  --blue-text: #64a8ff; --up: #ff6b78; --up-weak: rgba(240, 68, 82, 0.16); --down: #64a8ff; --down-weak: rgba(49, 130, 246, 0.16);
-  --danger: #ff6b78; --danger-weak: rgba(240, 68, 82, 0.16); --warn-text: #ffb35c; --warn-weak: rgba(255, 159, 28, 0.14);
-  --ok: #2fd18a; --chart-grid: #26262e; --shadow: none; --sheet-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
-  --heat-ink: #0b1a33;
-}
-
 /* ---------- 기본 ---------- */
 * { box-sizing: border-box; }
 html { background: var(--bg); }
@@ -283,8 +243,61 @@ h1, h2, h3, p { margin: 0; }
 .status-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; font-size: 15px; }
 .status-row .k { color: var(--text-3); }
 .status-row .v { font-weight: 600; text-align: right; }
+.steps { margin: 0 0 16px; padding-left: 20px; display: grid; gap: 12px; color: var(--text-2); font-size: 15px; }
+.steps b { color: var(--text); }
+.steps a { color: var(--blue-text); font-weight: 600; }
+.steps code { background: var(--fill); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
 .fail-box { margin-top: 8px; background: var(--danger-weak); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--danger); }
 .fail-box ul { margin: 6px 0 0; padding-left: 18px; word-break: break-all; }
+
+/* ---------- 녹취 목록 ---------- */
+.page-mid { max-width: 760px; }
+.search {
+  display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 16px; margin: 4px 0 12px;
+  background: var(--card); border-radius: var(--radius-sm); box-shadow: var(--shadow); color: var(--text-3);
+  border: 2px solid transparent;
+}
+.search:focus-within { border-color: var(--blue); }
+.search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 16px; color: var(--text); }
+.search input::placeholder { color: var(--text-4); }
+.search input::-webkit-search-cancel-button { display: none; }
+.chip-toggle[aria-pressed="true"] { background: var(--blue-weak); color: var(--blue-text); }
+.list-summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 4px 12px; color: var(--text-2); font-size: 15px; }
+.list-summary b { color: var(--text); font-weight: 700; }
+.list-summary .clear { border: 0; background: var(--fill-2); color: var(--text-2); height: 30px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.list-summary .warn { color: var(--danger); }
+.list-card { padding: 8px 12px 12px; }
+.day-head { position: sticky; top: calc(60px + env(safe-area-inset-top)); z-index: 2; background: var(--card); padding: 16px 12px 6px; font-size: 14px; font-weight: 700; color: var(--text-3); }
+.day-head span { font-weight: 500; margin-left: 4px; }
+.call-row {
+  width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px; border: 0; background: transparent;
+  border-radius: var(--radius-sm); text-align: left;
+}
+.call-row:hover, .call-row:focus-visible { background: var(--fill); }
+.call-row.current { background: var(--blue-weak); }
+.call-time { width: 48px; flex: none; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+.call-main { flex: 1; min-width: 0; }
+.call-num { font-weight: 600; font-size: 16px; font-variant-numeric: tabular-nums; }
+.call-num.none { color: var(--text-3); font-weight: 500; }
+.call-agent { font-size: 13px; color: var(--text-3); }
+.call-dur { font-size: 14px; color: var(--text-2); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.call-dur.short { color: var(--text-4); }
+.play-ic { width: 36px; height: 36px; border-radius: 50%; background: var(--blue-weak); color: var(--blue); display: grid; place-items: center; flex: none; }
+.play-ic.off { background: var(--fill); color: var(--text-4); }
+#calls-more { margin-top: 8px; }
+
+/* ---------- 재생 시트 ---------- */
+.player { margin-top: 8px; }
+.player audio { width: 100%; }
+.player iframe { width: 100%; height: 220px; border: 0; border-radius: var(--radius-sm); background: #000; }
+.player-note { font-size: 13px; color: var(--text-3); margin-top: 8px; }
+.player-none { background: var(--fill); border-radius: var(--radius-sm); padding: 20px; text-align: center; color: var(--text-3); }
+.player-links { display: flex; gap: 8px; margin-top: 10px; }
+.player-links .btn { flex: 1; }
+.facts { margin-top: 20px; display: grid; }
+.facts .status-row { border-top: 1px solid var(--line); }
+.facts .status-row:first-child { border-top: 0; }
+.sheet-actions { margin-top: 20px; }
 
 /* ---------- 하단 탭 (모바일) ---------- */
 .tabbar { display: none; }
@@ -369,6 +382,8 @@ h1, h2, h3, p { margin: 0; }
     backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
     border-top: 1px solid var(--line);
   }
+  .day-head { top: calc(60px + env(safe-area-inset-top)); }
+  .list-card { padding: 4px 8px 12px; }
   .tab { flex: 1; display: grid; place-items: center; align-content: center; gap: 2px; color: var(--text-4); text-decoration: none; font-size: 11px; font-weight: 600; }
   .tab.active { color: var(--text); }
   .toast { bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); }

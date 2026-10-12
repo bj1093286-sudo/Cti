@@ -27,10 +27,12 @@ CREATE TABLE IF NOT EXISTS calls (
     duration_sec     INTEGER NOT NULL DEFAULT 0,
     duration_source  TEXT,      -- 'header' | 'size'
     source_key       TEXT UNIQUE,    -- '<상담원 폴더>/<파일 경로>'의 HMAC (중복 적재 방지, 파일명에 번호가 있어 원문 미저장)
-    file_bytes       INTEGER
+    file_bytes       INTEGER,
+    drive_file_id    TEXT             -- 구글 드라이브 파일 ID(재생용). 데모 녹취는 'demo'
 );
 CREATE INDEX IF NOT EXISTS idx_calls_started ON calls(started_at);
 CREATE INDEX IF NOT EXISTS idx_calls_agent_started ON calls(agent_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_calls_customer ON calls(customer_key);
 
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
@@ -152,14 +154,38 @@ def connect(target):
     return conn
 
 
+# 이미 만들어진 DB에 나중에 추가된 열: (테이블, 열, 타입)
+_ADDED_COLUMNS = [("calls", "drive_file_id", "TEXT")]
+
+
+def _migrate(conn) -> None:
+    for table, col, typ in _ADDED_COLUMNS:
+        if getattr(conn, "is_pg", False):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typ}")
+        elif col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+
+
 def _init(conn, schema: str) -> None:
-    conn.executescript(schema)
+    # 인덱스가 새 열을 참조할 수 있으므로 테이블 생성 → 열 추가 → 나머지 순서로
+    tables, rest = _split_schema(schema)
+    conn.executescript(tables)
+    _migrate(conn)
+    conn.executescript(rest)
     for k, v in DEFAULT_SETTINGS.items():
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))
     # 전화번호 해시용 비밀키 — DB마다 한 번 생성. API로 노출하지 않는다.
     conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES ('customer_hash_key', ?)",
                  (secrets.token_hex(32),))
     conn.commit()
+
+
+def _split_schema(schema: str) -> tuple[str, str]:
+    stmts = [s.strip() for s in schema.split(";") if s.strip()]
+    tables = [s for s in stmts if s.upper().lstrip().startswith(("CREATE TABLE", "--"))
+              and "CREATE TABLE" in s.upper()]
+    rest = [s for s in stmts if s not in tables]
+    return ";\n".join(tables) + ";", (";\n".join(rest) + ";") if rest else ""
 
 
 def insert_returning_id(conn, sql: str, params=()) -> int:

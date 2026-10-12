@@ -75,5 +75,26 @@ class PostgresParityTest(unittest.TestCase):
         pg.close()
 
 
+@unittest.skipUnless(URL, "CTI_TEST_DATABASE_URL 없음")
+class PostgresCallsTest(unittest.TestCase):
+    def test_search_matches_sqlite(self):
+        from cti import calls
+        recs = [{"id": f"f{i}", "agent": ["가", "나"][i % 2], "size": 1000, "durationMs": i * 7000,
+                 "name": f"통화 녹음 010-1111-{2000 + i % 3}_2610{10 + i % 3}_0900{i:02d}.mp4"} for i in range(30)]
+        pg, lite = fresh_pg(), connect(":memory:")
+        for c in (pg, lite):
+            ingest.ingest_records(c, recs)
+        for kw in ({"q": "010-1111-2001"}, {"q": "2002"}, {"q": "나"}, {"min_sec": 100}, {}):
+            a = calls.search(pg, None, limit=7, **kw)
+            b = calls.search(lite, None, limit=7, **kw)
+            strip = lambda r: [(i["started_at"], i["agent_name"], i["customer_masked"], i["duration_sec"]) for i in r["items"]]
+            self.assertEqual((a["total"], strip(a)), (b["total"], strip(b)), kw)
+            if a["next_cursor"]:
+                a2 = calls.search(pg, None, limit=7, cursor=a["next_cursor"], **kw)
+                b2 = calls.search(lite, None, limit=7, cursor=b["next_cursor"], **kw)
+                self.assertEqual(strip(a2), strip(b2), kw)
+        pg.close(); lite.close()
+
+
 if __name__ == "__main__":
     unittest.main()

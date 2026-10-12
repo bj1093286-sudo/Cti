@@ -143,6 +143,35 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIsNotNone(s["last_ingest"]["at"])
 
+    def test_drive_push_and_calls(self):
+        a = self.login("admin", "pw-admin")
+        status, s, _ = self.req("GET", "/api/drive/script", token=a)
+        self.assertEqual(status, 200)
+        token = s["script"].split("const CTI_TOKEN = '")[1].split("'")[0]
+        self.assertIn("http://", s["script"])
+        v = self.login("viewer", "pw-viewer")
+        self.assertEqual(self.req("GET", "/api/drive/script", token=v)[0], 403)
+
+        body = {"first": True, "files": [{"id": "drvA", "agent": "드라이브상담원", "size": 1000, "durationMs": 61000,
+                                          "name": "통화 녹음 010-5555-6666_261012_150000.mp4"}]}
+        c = HTTPConnection("127.0.0.1", self.port)
+        c.request("POST", "/api/drive/push", json.dumps(body), {"Content-Type": "application/json", "X-CTI-Token": "nope"})
+        self.assertEqual(c.getresponse().status, 401)
+        c.close()
+        c = HTTPConnection("127.0.0.1", self.port)
+        c.request("POST", "/api/drive/push", json.dumps(body), {"Content-Type": "application/json", "X-CTI-Token": token})
+        r = c.getresponse()
+        self.assertEqual((r.status, json.loads(r.read())["added"]), (200, 1))
+        c.close()
+
+        status, res, _ = self.req("GET", "/api/calls?preset=all&q=010-5555-6666", token=v)
+        self.assertEqual((status, res["total"]), (200, 1))
+        call_id = res["items"][0]["id"]
+        status, d, _ = self.req(f"GET", f"/api/calls/{call_id}", token=v)
+        self.assertEqual(d["play"]["type"], "drive")
+        self.assertEqual(d["duration_sec"], 61)
+        self.assertEqual(self.req("GET", "/api/calls?preset=all&q=123", token=v)[0], 400)
+
     def test_static_and_traversal(self):
         self.assertEqual(self.req("GET", "/")[0], 200)
         self.assertEqual(self.req("GET", "/static/app.js")[0], 200)

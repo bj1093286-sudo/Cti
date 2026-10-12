@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f2f4f6" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#101013" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light only">
+  <meta name="theme-color" content="#f2f4f6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="통화 대시보드">
@@ -43,9 +43,10 @@
   <div id="app-view" class="app" hidden>
     <header class="topbar">
       <div class="topbar-inner">
-        <a class="brand" href="#dashboard">통화 대시보드</a>
+        <a class="brand" href="#calls">통화 녹취</a>
         <nav class="tabs-top" aria-label="메뉴">
-          <a class="nav-item" href="#dashboard" data-view="dashboard">홈</a>
+          <a class="nav-item" href="#calls" data-view="calls">녹취</a>
+          <a class="nav-item" href="#stats" data-view="stats">통계</a>
           <a class="nav-item" href="#settings" data-view="settings">설정</a>
         </nav>
         <span id="demo-badge" class="pill pill-warn" hidden>데모 데이터</span>
@@ -59,8 +60,34 @@
       </div>
     </header>
 
-    <!-- 홈(대시보드) -->
-    <main class="page" id="dashboard-view">
+    <!-- 녹취 목록 -->
+    <main class="page page-mid" id="calls-view">
+      <form class="search" id="call-search" role="search">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <input id="call-q" type="search" enterkeyhint="search" autocomplete="off"
+               placeholder="고객번호 (전체 또는 뒤 4자리) · 상담원 이름" aria-label="녹취 검색">
+        <button type="button" id="call-q-clear" class="icon-btn" aria-label="검색어 지우기" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".35"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </form>
+      <div class="filterbar">
+        <div class="chips" id="call-chips" role="radiogroup" aria-label="기간"></div>
+        <div id="call-range" class="custom-range" hidden>
+          <input type="date" id="call-start" aria-label="시작일">
+          <span class="muted">~</span>
+          <input type="date" id="call-end" aria-label="종료일">
+          <button id="call-apply" class="btn btn-primary btn-sm">조회</button>
+        </div>
+      </div>
+      <div class="list-summary" id="calls-summary" aria-live="polite"></div>
+      <section class="card list-card">
+        <div id="calls-list"></div>
+        <button type="button" id="calls-more" class="btn btn-secondary btn-block" hidden>더 보기</button>
+      </section>
+    </main>
+
+    <!-- 통계 -->
+    <main class="page" id="dashboard-view" hidden>
       <div class="filterbar">
         <div class="chips" role="radiogroup" aria-label="기간">
           <button class="chip" data-preset="today">오늘</button>
@@ -165,6 +192,19 @@
         <button type="submit" id="settings-save" class="btn btn-primary btn-lg btn-block">저장하기</button>
       </form>
 
+      <section class="card" id="drive-card" hidden>
+        <h2>구글 드라이브 연결</h2>
+        <ol class="steps">
+          <li><b>스크립트 복사</b>를 누르세요. 이 대시보드 주소와 연동 키가 이미 들어 있어요.</li>
+          <li>회사 구글 계정으로 <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com 새 프로젝트</a>를 열고, 있던 내용을 지운 뒤 붙여넣으세요.</li>
+          <li>맨 위 <code>FOLDER_ID</code>에 녹취 폴더 주소의 마지막 부분을 넣으세요.<br><span class="muted">drive.google.com/drive/folders/<b>이 부분</b></span></li>
+          <li>위쪽에서 함수 <b>설치</b>를 고르고 <b>실행</b> → 권한 허용. 끝이에요. 이후 5분마다 새 녹취가 들어와요.</li>
+        </ol>
+        <p id="drive-msg" class="form-msg" role="status"></p>
+        <button type="button" id="drive-copy" class="btn btn-primary btn-lg btn-block">스크립트 복사</button>
+        <p class="help" style="margin-top:12px">연동 키는 비밀번호처럼 다뤄 주세요. 녹취 파일은 드라이브에 그대로 있고, 대시보드에는 목록 정보만 들어와요.</p>
+      </section>
+
       <section class="card" id="ingest-card">
         <h2>녹취 가져오기</h2>
         <p class="help">녹취 폴더의 <b>상담원 이름 폴더</b> 안에 있는 파일 이름에서 고객번호와 통화 시작 시각을 읽어요. 고객번호는 가운데를 가려서 저장해요.</p>
@@ -176,9 +216,13 @@
 
     <!-- 모바일 하단 탭 -->
     <nav class="tabbar" aria-label="메뉴">
-      <a class="tab nav-item" href="#dashboard" data-view="dashboard">
-        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z"/></svg>
-        <span>홈</span>
+      <a class="tab nav-item" href="#calls" data-view="calls">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm7 9a7 7 0 0 1-6 6.9V21h-2v-2.1A7 7 0 0 1 5 12h2a5 5 0 0 0 10 0h2Z"/></svg>
+        <span>녹취</span>
+      </a>
+      <a class="tab nav-item" href="#stats" data-view="stats">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M5 20V10h3v10H5Zm5.5 0V4h3v16h-3Zm5.5 0v-7h3v7h-3Z"/></svg>
+        <span>통계</span>
       </a>
       <a class="tab nav-item" href="#settings" data-view="settings">
         <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.3 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.3-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5-2.1-1.6ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
@@ -219,6 +263,29 @@
         <h3>백업 기록</h3>
         <ul id="backups" class="list"></ul>
       </section>
+    </div>
+  </aside>
+
+  <!-- 녹취 재생 시트 -->
+  <div id="call-backdrop" class="backdrop" hidden></div>
+  <aside id="call-sheet" class="sheet" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="call-title">
+    <div class="sheet-grabber" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <span id="call-avatar" class="avatar avatar-lg"></span>
+      <div class="sheet-title-wrap">
+        <h2 id="call-title"></h2>
+        <p id="call-sub" class="caption"></p>
+      </div>
+      <button id="call-close" class="icon-btn" aria-label="닫기">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body">
+      <div id="call-player" class="player"></div>
+      <div id="call-facts" class="facts"></div>
+      <div class="sheet-actions">
+        <button type="button" id="call-same" class="btn btn-secondary btn-lg btn-block"></button>
+      </div>
     </div>
   </aside>
 

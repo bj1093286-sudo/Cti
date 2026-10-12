@@ -69,8 +69,8 @@ def seed(conn: sqlite3.Connection, sync_root: Path | None = None, days: int = 70
                 rows.append((aid, ingest.customer_key(hk, phone), f"{phone[:3]}-****-{phone[-4:]}",
                              ts.isoformat(sep=" "), dur))
     conn.executemany(
-        "INSERT INTO calls(agent_id, customer_key, customer_masked, started_at, duration_sec, duration_source) "
-        "VALUES (?, ?, ?, ?, ?, 'header')", rows)
+        "INSERT INTO calls(agent_id, customer_key, customer_masked, started_at, duration_sec, duration_source, "
+        "drive_file_id) VALUES (?, ?, ?, ?, ?, 'header', 'demo')", rows)
     conn.commit()
 
     if sync_root is None:
@@ -88,6 +88,8 @@ def seed(conn: sqlite3.Connection, sync_root: Path | None = None, days: int = 70
             os.utime(f, (old, old))
             n_files += 1
     stats = ingest.ingest_all(conn, sync_root)
+    conn.execute("UPDATE calls SET drive_file_id = 'demo' WHERE drive_file_id IS NULL")  # 데모는 모두 견본 소리로 재생
+    conn.commit()
     return {"agents": len(agents), "calls": len(rows) + stats["added"], "files": n_files}
 
 

@@ -94,15 +94,15 @@ def source_key(key: bytes, source: str) -> str:
 
 
 def _insert_call(conn, hk: bytes, agent_id: int, p: Parsed, sec: float, how: str,
-                 src_key: str, size: int | None) -> None:
+                 src_key: str, size: int | None, drive_file_id: str | None = None) -> None:
     conn.execute(
         """
         INSERT OR IGNORE INTO calls(agent_id, customer_key, customer_masked, started_at,
-                                    duration_sec, duration_source, source_key, file_bytes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                    duration_sec, duration_source, source_key, file_bytes, drive_file_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (agent_id, customer_key(hk, p.phone) if p.phone else None, p.masked,
-         p.started_at.isoformat(sep=" "), round(sec), how, src_key, size),
+         p.started_at.isoformat(sep=" "), round(sec), how, src_key, size, drive_file_id),
     )
 
 
@@ -226,7 +226,7 @@ def ingest_records(conn: sqlite3.Connection, records: list[dict], first: bool = 
                 sec, how = ms / 1000, "header"
             else:
                 sec, how = (size or 0) * 8 / (max(kbps, 1) * 1000), "size"
-            _insert_call(conn, hk, aid, p, sec, how, key, size)
+            _insert_call(conn, hk, aid, p, sec, how, key, size, str(r["id"]))
             known.add(key)
             stats["added"] += 1
         stats["agents"] = len(agents)

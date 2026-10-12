@@ -9,8 +9,10 @@
 """
 from __future__ import annotations
 
+import hmac
 import json
 import mimetypes
+import secrets
 import os
 import re
 import socket
@@ -24,8 +26,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth, backup, dashboard, demo, ingest
-from .db import connect, get_setting_int, set_setting
+from . import auth, backup, calls, dashboard, demo, ingest
+from .db import connect, get_setting, get_setting_int, set_setting
 from .periods import PRESETS, resolve
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +36,8 @@ COOKIE = "cti_session"
 
 
 ON_VERCEL = bool(os.environ.get("VERCEL"))
+# 녹취를 어디서 가져오나: folder(사무실 PC의 동기화 폴더) | drive(Apps Script 가 드라이브 목록을 보내 줌)
+SOURCE = os.environ.get("CTI_SOURCE") or ("drive" if ON_VERCEL else "folder")
 
 
 class Config:
@@ -109,6 +113,15 @@ def _parse_period(cfg: Config, q: dict):
         raise ApiError(HTTPStatus.BAD_REQUEST, str(e))
 
 
+def _parse_int(q: dict, key: str) -> int | None:
+    v = q.get(key)
+    if not v:
+        return None
+    if not v.isdigit():
+        raise ApiError(HTTPStatus.BAD_REQUEST, f"잘못된 값: {key}")
+    return int(v)
+
+
 def _parse_agent(q: dict) -> int | None:
     v = q.get("agent_id")
     if not v:
@@ -135,9 +148,25 @@ def _save_settings(conn: sqlite3.Connection, body: dict) -> None:
     conn.commit()
 
 
+def drive_token(conn) -> str:
+    """Apps Script 가 /api/drive/push 에 보낼 연동 키(DB마다 한 번 생성)."""
+    tok = get_setting(conn, "drive_push_token")
+    if not tok:
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES ('drive_push_token', ?)",
+                     (secrets.token_urlsafe(24),))
+        conn.commit()
+        tok = get_setting(conn, "drive_push_token")
+    return tok
+
+
+def drive_script(conn, base_url: str) -> str:
+    tpl = (Path(__file__).with_name("drive_sync.gs")).read_text(encoding="utf-8")
+    return tpl.replace("{{CTI_URL}}", base_url).replace("{{CTI_TOKEN}}", drive_token(conn))
+
+
 def _settings_payload(conn: sqlite3.Connection) -> dict:
     return {**{k: get_setting_int(conn, k) for k in EDITABLE_SETTINGS},
-            "last_ingest": ingest.last_result(conn)}
+            "last_ingest": ingest.last_result(conn), "source": SOURCE}
 
 
 def make_handler(cfg: Config):
@@ -226,6 +255,22 @@ def make_handler(cfg: Config):
             self.end_headers()
             self.wfile.write(body)
 
+        # ---- 구글 드라이브(Apps Script) 연동 ----
+        def _base_url(self) -> str:
+            proto = self.headers.get("X-Forwarded-Proto") or ("https" if ON_VERCEL else "http")
+            return f"{proto}://{self.headers.get('Host', '127.0.0.1')}"
+
+        def _drive_push(self, conn):
+            sent = self.headers.get("X-CTI-Token", "")
+            if not sent or not hmac.compare_digest(sent, drive_token(conn)):
+                raise ApiError(HTTPStatus.UNAUTHORIZED, "연동 키가 맞지 않아요. 설정 화면의 스크립트를 다시 복사해 주세요.")
+            body = self._read_json()
+            files = body.get("files")
+            if not isinstance(files, list) or len(files) > ingest.MAX_RECORDS:
+                raise ApiError(HTTPStatus.BAD_REQUEST, f"files 는 {ingest.MAX_RECORDS}개 이하 목록이어야 해요.")
+            s = ingest.ingest_records(conn, [f for f in files if isinstance(f, dict)], bool(body.get("first", True)))
+            return self._send_json(200, {"added": s["added"], "already": s["already"]})
+
         # ---- API ----
         def _api(self, method: str, path: str, q: dict, conn: sqlite3.Connection):
             if method == "POST" and path == "/api/login":
@@ -242,6 +287,9 @@ def make_handler(cfg: Config):
                 if self.headers.get("X-Forwarded-Proto") == "https":
                     cookie += "; Secure"
                 return self._send_json(200, user, {"Set-Cookie": cookie})
+
+            if method == "POST" and path == "/api/drive/push":
+                return self._drive_push(conn)
 
             user = auth.user_for_token(conn, self._token())
             if user is None:
@@ -263,6 +311,10 @@ def make_handler(cfg: Config):
                         raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 변경할 수 있습니다.")
                     _save_settings(conn, self._read_json())
                 return self._send_json(200, _settings_payload(conn))
+            if method == "GET" and path == "/api/drive/script":
+                if user["role"] != "admin":
+                    raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 볼 수 있어요.")
+                return self._send_json(200, {"script": drive_script(conn, self._base_url())})
             if method == "POST" and path == "/api/ingest":
                 if user["role"] != "admin":
                     raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 실행할 수 있습니다.")
@@ -273,6 +325,21 @@ def make_handler(cfg: Config):
                 cur, prev = _parse_period(cfg, q)
                 return self._send_json(200, dashboard.build(conn, cur, prev, _parse_agent(q)))
 
+            if method == "GET" and path == "/api/calls":
+                period = None if q.get("preset") == "all" else _parse_period(cfg, q)[0]
+                try:
+                    return self._send_json(200, calls.search(
+                        conn, period, _parse_agent(q), q.get("q"),
+                        _parse_int(q, "same_as"), _parse_int(q, "min_sec"), q.get("cursor")))
+                except calls.SearchError as e:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, str(e))
+            m = re.fullmatch(r"/api/calls/(\d+)", path)
+            if m and method == "GET":
+                d = calls.detail(conn, int(m.group(1)))
+                if d is None:
+                    raise ApiError(HTTPStatus.NOT_FOUND, "녹취를 찾을 수 없어요.")
+                return self._send_json(200, d)
+
             m = re.fullmatch(r"/api/agents/(\d+)(/backup)?", path)
             if m:
                 agent_id = int(m.group(1))
@@ -282,7 +349,7 @@ def make_handler(cfg: Config):
                         conn, agent_id, cur, get_setting_int(conn, "min_call_sec"))
                     if detail is None:
                         raise ApiError(HTTPStatus.NOT_FOUND, "상담원을 찾을 수 없습니다.")
-                    if user["role"] == "admin":
+                    if user["role"] == "admin" and SOURCE == "folder":
                         detail["sync_folder"] = backup.folder_status(conn, agent_id, cfg.sync_root)
                         detail["backups"] = backup.history(conn, agent_id)
                     return self._send_json(200, detail)
