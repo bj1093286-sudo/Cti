@@ -70,23 +70,23 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   const byServer = !!p.token;
   if (byServer && p.token !== CTI_TOKEN) return json_({ ok: false, error: '연동 키가 맞지 않아요' });
-  if (!byServer && !sameDomainUser_()) return page_('동기화할 수 없어요', '회사 구글 계정으로 로그인한 브라우저에서 눌러 주세요.', false);
+  if (!byServer && !sameDomainUser_()) return page_('동기화할 수 없어요', '회사 구글 계정으로 로그인한 브라우저에서 눌러 주세요.', false, {});
   let r;
   try {
     r = 동기화(byServer ? SYNC_NOW_BUDGET_MS : SYNC_TAB_BUDGET_MS);
   } catch (err) {
     return byServer ? json_({ ok: false, error: String(err).slice(0, 300) })
-      : page_('동기화 중 문제가 생겼어요', String(err).slice(0, 300), false);
+      : page_('동기화 중 문제가 생겼어요', String(err).slice(0, 300), false, {});
   }
   if (r.busy) {
     return byServer ? json_({ ok: false, busy: true, error: '이미 동기화 중이에요. 잠시 후 다시 눌러 주세요.' })
-      : page_('이미 동기화 중이에요', '잠시 후 다시 눌러 주세요.', false);
+      : page_('이미 동기화 중이에요', '잠시 후 다시 눌러 주세요.', false, { busy: true });
   }
   if (byServer) return json_(Object.assign({ ok: true }, r));
   const lines = [r.added ? '새 녹취 ' + r.added + '건을 가져왔어요.' : '새 녹취가 없어요.'];
   if (r.backups) lines.push('백업 ' + r.backups + '건을 처리했어요.');
   if (r.more) lines.push('남은 녹취는 곧 이어서 가져와요.');
-  return page_('동기화했어요', lines.join(' '), true);
+  return page_('동기화했어요', lines.join(' '), true, r);
 }
 
 /** 웹 앱을 연 사람이 스크립트 주인과 같은 회사 도메인 계정인지 */
@@ -96,7 +96,11 @@ function sameDomainUser_() {
   return !!me && !!owner && me.split('@')[1] === owner.split('@')[1];
 }
 
-function page_(title, body, ok) {
+/**
+ * 새 탭 결과 화면. 대시보드가 연 탭이면 결과를 대시보드에 알림으로 보내고 탭을 스스로 닫는다.
+ * (닫히지 않으면 화면의 버튼으로 돌아가면 됨)
+ */
+function page_(title, body, ok, data) {
   const esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   const html = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<div style="font-family:system-ui,-apple-system,sans-serif;max-width:420px;margin:15vh auto;padding:24px;text-align:center">' +
@@ -105,7 +109,10 @@ function page_(title, body, ok) {
     '<p style="color:#4e5968;font-size:16px;line-height:1.5">' + esc(body) + '</p>' +
     '<p style="color:#8b95a1;font-size:14px;margin-top:24px">이 탭을 닫고 대시보드로 돌아가면 목록이 새로 고쳐져요.</p>' +
     '<a href="' + esc(CTI_URL) + '/#calls" target="_top" style="display:inline-block;margin-top:8px;padding:14px 22px;border-radius:14px;' +
-    'background:#055cf5;color:#fff;text-decoration:none;font-weight:700">대시보드로 돌아가기</a></div>';
+    'background:#055cf5;color:#fff;text-decoration:none;font-weight:700">대시보드로 돌아가기</a></div>' +
+    '<script>try{var o=window.top.opener;if(o){o.postMessage(' +
+    JSON.stringify({ type: 'cti-sync', ok: ok, title: title, message: body, added: (data && data.added) || 0 }) +
+    ",'*');setTimeout(function(){window.top.close();},400);}}catch(e){}</script>";  // 결과(건수)만 담겨 있어 받는 곳 제한 불필요
   return HtmlService.createHtmlOutput(html).setTitle(title);
 }
 

@@ -736,8 +736,17 @@
   function syncInTab(win) {
     tabSyncPending = true;
     if (win) win.location.href = tabUrl(); else window.open(tabUrl(), "_blank");
-    toast("새 탭에서 동기화하고 있어요. 끝나면 이 화면으로 돌아오세요.");
+    toast("동기화하고 있어요. 잠시 열리는 탭은 끝나면 저절로 닫혀요.");
   }
+  // 새 탭(구글 스크립트 결과 화면)이 보내는 결과 → 알림으로 보여 주고 목록 새로 고침
+  window.addEventListener("message", (e) => {
+    const d = e.data;
+    if (!d || d.type !== "cti-sync") return;
+    if (!/^https:\/\/([a-z0-9-]+\.)*(googleusercontent\.com|google\.com)$/.test(e.origin)) return;
+    tabSyncPending = false;
+    toast(d.ok ? d.message : `${d.title} · ${d.message}`);
+    if (d.ok) { dashboardStale = true; loadCalls(); }
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && tabSyncPending) {
       tabSyncPending = false; dashboardStale = true;
