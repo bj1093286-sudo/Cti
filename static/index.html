@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400..800&display=swap">
   <title>미소 통화 녹취</title>
-  <link rel="stylesheet" href="/static/app.css?v=20261012-2">
+  <link rel="stylesheet" href="/static/app.css?v=20261012-3">
   <script src="/static/vendor/chart.umd.js?v=4.4.1"></script>
 </head>
 <body>
@@ -231,11 +231,16 @@
 
       <section class="card" id="drive-card" hidden>
         <h2>구글 드라이브 연결</h2>
+        <div class="field">
+          <label for="drive-folder">녹취 폴더 주소</label>
+          <input id="drive-folder" class="text-input" type="url" inputmode="url" autocomplete="off"
+                 placeholder="https://drive.google.com/drive/folders/…">
+          <p class="help">구글 드라이브에서 녹취 폴더를 열었을 때의 주소를 붙여넣으세요.</p>
+        </div>
         <ol class="steps">
-          <li><b>스크립트 복사</b>를 누르세요. 이 대시보드 주소와 연동 키가 이미 들어 있어요.</li>
-          <li>회사 구글 계정으로 <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com 새 프로젝트</a>를 열고, 있던 내용을 지운 뒤 붙여넣으세요.</li>
-          <li>맨 위 <code>FOLDER_ID</code>에 녹취 폴더 주소의 마지막 부분을 넣으세요.<br><span class="muted">drive.google.com/drive/folders/<b>이 부분</b></span></li>
-          <li>위쪽에서 함수 <b>설치</b>를 고르고 <b>실행</b> → 권한 허용. 끝이에요. 이후 5분마다 새 녹취가 들어와요.</li>
+          <li><b>스크립트 복사</b>를 누르세요. 대시보드 주소·연동 키·폴더가 모두 들어 있어요.</li>
+          <li>녹취 폴더가 보이는 <b>회사 구글 계정</b>으로 <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com 새 프로젝트</a>를 열고, 있던 내용을 지운 뒤 붙여넣고 저장(💾)하세요.</li>
+          <li>위쪽 함수 목록에서 <b>설치</b>를 고르고 <b>실행</b> → 권한 허용. 끝이에요. 이후 5분마다 새 녹취가 들어와요.</li>
         </ol>
         <p id="drive-msg" class="form-msg" role="status"></p>
         <button type="button" id="drive-copy" class="btn btn-primary btn-lg btn-block">스크립트 복사</button>
@@ -349,6 +354,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="/static/app.js?v=20261012-2"></script>
+  <script src="/static/app.js?v=20261012-3"></script>
 </body>
 </html>

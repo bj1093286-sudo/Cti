@@ -917,6 +917,7 @@
     renderIngestStatus(s.last_ingest);
     const drive = s.source === "drive";
     $("#drive-card").hidden = !drive || state.user.role !== "admin";
+    try { if (!$("#drive-folder").value) $("#drive-folder").value = localStorage.getItem("cti.driveFolder") || ""; } catch { /* 무시 */ }
     $("#backup-card").hidden = !drive || state.user.role !== "admin";
     if (drive && state.user.role === "admin") loadDriveBackup();
     $("#ingest-now").hidden = drive || state.user.role !== "admin";
@@ -993,9 +994,15 @@
 
   $("#drive-copy").addEventListener("click", async () => {
     const msg = $("#drive-msg");
+    const raw = $("#drive-folder").value.trim();
+    const m = /folders\/([A-Za-z0-9_-]{10,})/.exec(raw) || /^([A-Za-z0-9_-]{10,})$/.exec(raw);
+    if (!m) {
+      msg.className = "form-msg err"; msg.textContent = "녹취 폴더 주소를 먼저 붙여넣어 주세요."; $("#drive-folder").focus(); return;
+    }
+    try { localStorage.setItem("cti.driveFolder", raw); } catch { /* 무시 */ }
     try {
       const { script } = await api("/api/drive/script");
-      await navigator.clipboard.writeText(script);
+      await navigator.clipboard.writeText(script.replace("'여기에_녹취_폴더_ID'", `'${m[1]}'`));
       msg.className = "form-msg ok"; msg.textContent = "복사했어요. script.google.com 에 붙여넣어 주세요.";
     } catch (err) {
       msg.className = "form-msg err";

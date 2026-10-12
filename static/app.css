@@ -262,6 +262,8 @@ h1, h2, h3, p { margin: 0; }
 .tag-wait { background: var(--blue-weak); color: var(--blue-text); }
 .tag-done { background: var(--fill); color: var(--text-3); }
 .tag-fail { background: var(--danger-weak); color: var(--danger); }
+.text-input { height: 52px; border: 2px solid transparent; border-radius: var(--radius-sm); background: var(--fill); padding: 0 14px; font-size: 15px; width: 100%; outline: none; }
+.text-input:focus { border-color: var(--blue); background: var(--card); }
 .steps { margin: 0 0 16px; padding-left: 20px; display: grid; gap: 12px; color: var(--text-2); font-size: 15px; }
 .steps b { color: var(--text); }
 .steps a { color: var(--blue-text); font-weight: 600; }
