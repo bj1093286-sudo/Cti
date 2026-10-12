@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CTI 통화 대시보드</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/vendor/chart.umd.js"></script>
+</head>
+<body>
+  <!-- 로그인 -->
+  <section id="login-view" class="login" hidden>
+    <form id="login-form" class="card login-card">
+      <h1>CTI 통화 대시보드</h1>
+      <label>아이디 <input name="username" autocomplete="username" required></label>
+      <label>비밀번호 <input name="password" type="password" autocomplete="current-password" required></label>
+      <p id="login-error" class="error" role="alert"></p>
+      <button type="submit" class="btn primary">로그인</button>
+    </form>
+  </section>
+
+  <!-- 앱 -->
+  <div id="app-view" class="app" hidden>
+    <header class="topbar">
+      <nav class="menu">
+        <a class="menu-item active" href="#dashboard">대시보드</a>
+      </nav>
+      <div class="user">
+        <span id="user-label"></span>
+        <button id="logout" class="btn ghost">로그아웃</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <!-- 필터 -->
+      <div class="filters">
+        <div class="seg" role="radiogroup" aria-label="기간">
+          <button data-preset="today" class="active">오늘</button>
+          <button data-preset="yesterday">어제</button>
+          <button data-preset="this_week">이번 주</button>
+          <button data-preset="this_month">이번 달</button>
+          <button data-preset="custom">직접 지정</button>
+        </div>
+        <div id="custom-range" class="custom-range" hidden>
+          <input type="date" id="start-date" aria-label="시작일">
+          <span>~</span>
+          <input type="date" id="end-date" aria-label="종료일">
+          <button id="apply-range" class="btn">적용</button>
+        </div>
+        <label class="agent-filter">상담원
+          <select id="agent-filter"><option value="">전체</option></select>
+        </label>
+        <span id="period-label" class="muted"></span>
+      </div>
+
+      <!-- KPI -->
+      <section class="kpis" id="kpis"></section>
+
+      <!-- 차트 -->
+      <section class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <h2>일별 통화량 추이</h2>
+          </div>
+          <div id="trend-legend" class="legend" aria-label="상담원별 선 표시"></div>
+          <div class="chart-box"><canvas id="trend-chart" aria-label="일별 통화량 추이"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>시간대별 통화 분포</h2><span class="muted small">0~23시, 전체 통화</span></div>
+          <div class="chart-box"><canvas id="hourly-chart" aria-label="시간대별 통화 분포"></canvas></div>
+        </div>
+      </section>
+
+      <!-- 히트맵 -->
+      <section class="card">
+        <div class="card-head">
+          <h2>일별 상담원 처리건수</h2>
+          <span class="muted small" id="matrix-note"></span>
+        </div>
+        <div class="table-scroll"><table id="matrix" class="table heatmap"></table></div>
+      </section>
+
+      <!-- 상담원별 실적 -->
+      <section class="card">
+        <div class="card-head"><h2>상담원별 실적</h2><span class="muted small">열 제목을 눌러 정렬</span></div>
+        <div class="table-scroll"><table id="perf" class="table sortable"></table></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 상담원 드로어 -->
+  <div id="drawer-backdrop" class="backdrop" hidden></div>
+  <aside id="drawer" class="drawer" aria-hidden="true" role="dialog" aria-labelledby="drawer-title">
+    <div class="drawer-head">
+      <h2 id="drawer-title"></h2>
+      <button id="drawer-close" class="btn ghost" aria-label="닫기">✕</button>
+    </div>
+    <div class="drawer-body">
+      <section>
+        <h3>처리건수 추이</h3>
+        <div class="chart-box small"><canvas id="drawer-chart"></canvas></div>
+      </section>
+      <section>
+        <h3>최근 통화</h3>
+        <div class="table-scroll"><table id="recent" class="table compact"></table></div>
+      </section>
+      <section id="admin-section" hidden>
+        <h3>동기화 폴더</h3>
+        <div id="sync-status" class="sync-status"></div>
+        <button id="backup-btn" class="btn danger">백업 후 동기화 폴더 비우기</button>
+        <p id="backup-msg" class="small" role="status"></p>
+        <h3>백업 이력</h3>
+        <div class="table-scroll"><table id="backups" class="table compact"></table></div>
+      </section>
+    </div>
+  </aside>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
