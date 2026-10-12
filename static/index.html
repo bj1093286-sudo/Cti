@@ -238,8 +238,9 @@
       <section class="card" id="backup-card" hidden>
         <h2>녹취 백업</h2>
         <p class="help">상담원 폴더의 녹취를 같은 드라이브의 <b>_백업</b> 폴더로 옮겨 폴더를 비워요. 지우지 않아서 백업한 녹취도 계속 조회하고 들을 수 있어요. 누르면 5분 안에 처리돼요.</p>
-        <button type="button" id="backup-all" class="btn btn-primary btn-lg btn-block">전체 백업</button>
-        <ul class="list" id="backup-agents"></ul>
+        <label class="lk-check sel-all"><input type="checkbox" id="backup-select-all"> 전체 선택</label>
+        <ul class="list pick-list" id="backup-agents"></ul>
+        <button type="button" id="backup-selected" class="btn btn-primary btn-lg btn-block" disabled>백업할 상담원을 골라 주세요</button>
         <h3 class="sub-h">백업 기록</h3>
         <ul class="list" id="backup-history"></ul>
       </section>

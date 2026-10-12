@@ -909,37 +909,26 @@
   async function loadDriveBackup() {
     try { renderDriveBackup(await api("/api/drive/backup")); } catch (err) { toast(err.message); }
   }
-  $("#backup-all").addEventListener("click", async () => {
-    const o = state.backupOverview;
-    const targets = (o?.agents || []).filter((a) => a.waiting && !a.pending);
-    if (!targets.length) return toast("백업할 녹취가 없어요.");
-    const n = targets.reduce((s, a) => s + a.waiting, 0);
-    const ok = await ask(`상담원 ${fmtInt(targets.length)}명, 녹취 ${fmtInt(n)}개를 모두 백업할까요?`,
-      "드라이브의 _백업 폴더로 옮겨서 상담원 폴더를 비워요. 지우지 않으니 계속 들을 수 있어요.", "전체 백업");
-    if (!ok) return;
-    try {
-      const r = await api("/api/drive/backup/all", { method: "POST", body: "{}" });
-      renderDriveBackup(r);
-      toast(`상담원 ${fmtInt(r.requested)}명 백업을 요청했어요. 5분 안에 처리돼요.`);
-    } catch (err) { toast(err.message); }
-  });
+  const picked = new Set();
+  const pickable = (a) => a.waiting > 0 && !a.pending;
   function renderDriveBackup(o) {
     state.backupOverview = o;
-    const waitingAll = o.agents.filter((a) => a.waiting && !a.pending);
-    $("#backup-all").disabled = !waitingAll.length;
-    $("#backup-all").textContent = waitingAll.length
-      ? `전체 백업 · 녹취 ${fmtInt(waitingAll.reduce((s, a) => s + a.waiting, 0))}개` : "전체 백업";
-    $("#backup-agents").replaceChildren(...(o.agents.length ? o.agents.map((a) => el("li", {},
-      el("span", { class: "avatar" }, a.name.slice(0, 1)),
-      el("div", { class: "main" },
-        el("div", { class: "t" }, a.name),
-        el("div", { class: "s" }, a.pending ? "백업 대기 중 · 5분 안에 처리돼요"
-          : a.waiting ? `백업 안 한 녹취 ${fmtInt(a.waiting)}개` : "모두 백업했어요")),
-      a.pending ? el("span", { class: "tag tag-wait" }, "대기 중")
-        : el("button", {
-          class: "btn btn-secondary btn-sm", disabled: !a.waiting,
-          onclick: () => requestBackup(a),
-        }, "백업하기"))) : [el("li", { class: "empty" }, "상담원이 없어요")]));
+    for (const id of [...picked]) if (!o.agents.some((a) => a.agent_id === id && pickable(a))) picked.delete(id);
+    $("#backup-agents").replaceChildren(...(o.agents.length ? o.agents.map((a) => {
+      const can = pickable(a);
+      return el("li", {},
+        el("label", { class: `pick-row${can ? "" : " off"}` },
+          el("input", {
+            type: "checkbox", disabled: !can, checked: picked.has(a.agent_id),
+            onchange: (e) => { e.target.checked ? picked.add(a.agent_id) : picked.delete(a.agent_id); updatePickUI(); },
+          }),
+          el("span", { class: "avatar" }, a.name.slice(0, 1)),
+          el("div", { class: "main" },
+            el("div", { class: "t" }, a.name),
+            el("div", { class: "s" }, a.pending ? "백업 대기 중 · 5분 안에 처리돼요"
+              : a.waiting ? `백업 안 한 녹취 ${fmtInt(a.waiting)}개` : "모두 백업했어요")),
+          a.pending ? el("span", { class: "tag tag-wait" }, "대기 중") : null));
+    }) : [el("li", { class: "empty" }, "상담원이 없어요")]));
     const label = { pending: ["대기 중", "tag-wait"], done: ["완료", "tag-done"], failed: ["실패", "tag-fail"] };
     $("#backup-history").replaceChildren(...(o.history.length ? o.history.map((h) => el("li", {},
       el("div", { class: "main" },
@@ -947,16 +936,43 @@
           : `${h.agent_name} · ${fmtInt(h.moved)}개 옮김${h.failed ? ` · ${fmtInt(h.failed)}개 실패` : ""}`),
         el("div", { class: "s" }, `${dateTimeKo(h.requested_at)} · ${h.requested_by}${h.message ? ` · ${h.message}` : ""}`)),
       el("span", { class: `tag ${label[h.status]?.[1] || "tag-done"}` }, label[h.status]?.[0] || h.status))) : [el("li", { class: "empty" }, "아직 백업한 적이 없어요")]));
+    updatePickUI();
   }
-  async function requestBackup(a) {
-    const ok = await ask(`${a.name}님 녹취 ${fmtInt(a.waiting)}개를 백업할까요?`,
+  function updatePickUI() {
+    const agents = state.backupOverview?.agents || [];
+    const can = agents.filter(pickable);
+    const sel = can.filter((a) => picked.has(a.agent_id));
+    const all = $("#backup-select-all");
+    all.disabled = !can.length;
+    all.checked = can.length > 0 && sel.length === can.length;
+    all.indeterminate = sel.length > 0 && sel.length < can.length;
+    const btn = $("#backup-selected");
+    btn.disabled = !sel.length;
+    btn.textContent = sel.length
+      ? `선택한 ${fmtInt(sel.length)}명 백업 · 녹취 ${fmtInt(sel.reduce((n, a) => n + a.waiting, 0))}개`
+      : can.length ? "백업할 상담원을 골라 주세요" : "백업할 녹취가 없어요";
+  }
+  $("#backup-select-all").addEventListener("change", (e) => {
+    const can = (state.backupOverview?.agents || []).filter(pickable);
+    picked.clear();
+    if (e.target.checked) can.forEach((a) => picked.add(a.agent_id));
+    renderDriveBackup(state.backupOverview);
+  });
+  $("#backup-selected").addEventListener("click", async () => {
+    const sel = (state.backupOverview?.agents || []).filter((a) => pickable(a) && picked.has(a.agent_id));
+    if (!sel.length) return;
+    const n = sel.reduce((s, a) => s + a.waiting, 0);
+    const names = sel.length <= 3 ? sel.map((a) => a.name).join(", ") : `${sel[0].name} 외 ${sel.length - 1}명`;
+    const ok = await ask(`${names} · 녹취 ${fmtInt(n)}개를 백업할까요?`,
       "드라이브의 _백업 폴더로 옮겨서 상담원 폴더를 비워요. 지우지 않으니 계속 들을 수 있어요.", "백업하기");
     if (!ok) return;
     try {
-      renderDriveBackup(await api(`/api/agents/${a.agent_id}/backup`, { method: "POST", body: "{}" }));
-      toast("백업을 요청했어요. 5분 안에 처리돼요.");
+      const r = await api("/api/drive/backup", { method: "POST", body: JSON.stringify({ agent_ids: sel.map((a) => a.agent_id) }) });
+      picked.clear();
+      renderDriveBackup(r);
+      toast(`${fmtInt(r.requested)}명 백업을 요청했어요. 5분 안에 처리돼요.`);
     } catch (err) { toast(err.message); }
-  }
+  });
 
   $("#drive-copy").addEventListener("click", async () => {
     const msg = $("#drive-msg");

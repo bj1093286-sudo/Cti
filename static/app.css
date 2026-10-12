@@ -244,8 +244,13 @@ h1, h2, h3, p { margin: 0; }
 .status-row .k { color: var(--text-3); }
 .status-row .v { font-weight: 600; text-align: right; }
 .sub-h { font-size: 16px; font-weight: 700; margin: 24px 0 4px; }
-#backup-all { margin-top: 16px; }
-#backup-agents { margin-top: 8px; }
+.sel-all { padding: 16px 0 4px; font-weight: 600; color: var(--text); }
+.pick-list li { padding: 0; }
+.pick-row { flex: 1; display: flex; align-items: center; gap: 12px; padding: 12px 0; cursor: pointer; min-width: 0; }
+.pick-row input { width: 22px; height: 22px; accent-color: var(--blue); flex: none; }
+.pick-row.off { cursor: default; }
+.pick-row.off .t { color: var(--text-3); }
+#backup-selected { margin-top: 12px; }
 .list .btn-sm { height: 36px; padding: 0 14px; font-size: 14px; flex: none; }
 .tag { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
 .tag-wait { background: var(--blue-weak); color: var(--blue-text); }

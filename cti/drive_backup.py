@@ -32,6 +32,19 @@ def request(conn, agent_id: int, requested_by: str) -> dict:
     return dict(conn.execute("SELECT * FROM drive_tasks WHERE id = ?", (tid,)).fetchone())
 
 
+def request_many(conn, agent_ids: list[int], requested_by: str) -> int:
+    """고른 상담원들 백업 요청. 이미 대기 중이거나 없는 상담원은 건너뛴다. 새로 요청한 수."""
+    n = 0
+    for aid in dict.fromkeys(int(a) for a in agent_ids):
+        if not conn.execute("SELECT 1 FROM agents WHERE id = ?", (aid,)).fetchone():
+            continue
+        if conn.execute("SELECT 1 FROM drive_tasks WHERE agent_id = ? AND status = 'pending'", (aid,)).fetchone():
+            continue
+        request(conn, aid, requested_by)
+        n += 1
+    return n
+
+
 def request_all(conn, requested_by: str) -> int:
     """백업 안 한 녹취가 있는 모든 상담원을 한 번에 요청. 새로 요청한 수를 돌려준다."""
     rows = conn.execute(

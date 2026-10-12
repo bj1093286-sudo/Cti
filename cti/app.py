@@ -336,6 +336,12 @@ def make_handler(cfg: Config):
                     self._read_json()
                     n = drive_backup.request_all(conn, user["username"])
                     return self._send_json(200, {**drive_backup.overview(conn), "requested": n})
+                if method == "POST":
+                    ids = self._read_json().get("agent_ids")
+                    if not isinstance(ids, list) or not ids or not all(isinstance(i, int) for i in ids):
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "백업할 상담원을 골라 주세요.")
+                    n = drive_backup.request_many(conn, ids, user["username"])
+                    return self._send_json(200, {**drive_backup.overview(conn), "requested": n})
                 if method == "GET" and not path.endswith("/all"):
                     return self._send_json(200, drive_backup.overview(conn))
             if method == "GET" and path == "/api/drive/script":

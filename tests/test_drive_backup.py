@@ -57,6 +57,12 @@ class DriveBackupTest(unittest.TestCase):
         self.assertEqual(sorted(t["agent"] for t in drive_backup.pending(self.conn)), ["김민지", "이서준"])
         self.assertEqual(drive_backup.request_all(self.conn, "admin"), 0)  # 다시 눌러도 중복 요청 없음
 
+    def test_request_many(self):
+        lee = self.conn.execute("SELECT id FROM agents WHERE name = '이서준'").fetchone()[0]
+        self.assertEqual(drive_backup.request_many(self.conn, [self.kim, lee, self.kim, 999], "admin"), 2)
+        self.assertEqual(drive_backup.request_many(self.conn, [self.kim], "admin"), 0)  # 이미 대기 중
+        self.assertEqual(len(drive_backup.pending(self.conn)), 2)
+
     def test_bad_report(self):
         t = drive_backup.request(self.conn, self.kim, "admin")
         with self.assertRaises(ValueError):
