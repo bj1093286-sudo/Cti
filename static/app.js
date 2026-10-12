@@ -91,7 +91,7 @@
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401 && path !== "/api/login") { showLogin(); throw new Error(data.error || "로그인이 필요해요."); }
-    if (!res.ok) throw new Error(data.error || `요청에 실패했어요 (${res.status})`);
+    if (!res.ok) { const e = new Error(data.error || `요청에 실패했어요 (${res.status})`); e.status = res.status; throw e; }
     return data;
   }
   const toast = (msg) => {
@@ -212,7 +212,8 @@
     setupLookup();
     try {
       const st = await api("/api/settings");
-      state.minSec = st.min_call_sec; state.source = st.source; state.webapp = !!st.drive_webapp_url;
+      state.minSec = st.min_call_sec; state.source = st.source;
+      state.webapp = !!st.drive_webapp_url; state.webappUrl = st.drive_webapp_url;
     } catch { state.minSec = 0; }
     updateSyncButton();
     dashboardStale = true;
@@ -726,12 +727,35 @@
     // 드라이브 연결일 때만. 웹 앱 주소가 없으면 관리자에게만 보여서 설정으로 안내
     $("#sync-now").hidden = state.source !== "drive" || (!state.webapp && state.user?.role !== "admin");
   }
+  // 방식: server(대시보드 서버가 부름, '모든 사용자' 배포) | tab(새 탭에서 회사 계정으로, '회사의 모든 사용자' 배포)
+  const MODE_KEY = "cti.syncMode";
+  const getMode = () => { try { return localStorage.getItem(MODE_KEY); } catch { return null; } };
+  const setMode = (m) => { try { m ? localStorage.setItem(MODE_KEY, m) : localStorage.removeItem(MODE_KEY); } catch { /* 무시 */ } };
+  let tabSyncPending = false;
+  const tabUrl = () => `${state.webappUrl}?action=sync`;
+  function syncInTab(win) {
+    tabSyncPending = true;
+    if (win) win.location.href = tabUrl(); else window.open(tabUrl(), "_blank");
+    toast("새 탭에서 동기화하고 있어요. 끝나면 이 화면으로 돌아오세요.");
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && tabSyncPending) {
+      tabSyncPending = false; dashboardStale = true;
+      setTimeout(() => loadCalls().then(() => toast("동기화 결과를 반영했어요.")), 300);
+    }
+  });
   $("#sync-now").addEventListener("click", async () => {
     const btn = $("#sync-now");
     if (!state.webapp) { toast("설정에서 웹 앱 주소를 먼저 넣어 주세요."); location.hash = "#settings"; return; }
+    const mode = getMode();
+    if (mode === "tab") return syncInTab(null);
+    // 처음엔 어느 방식인지 모르니, 팝업 차단을 피하려고 빈 탭을 먼저 열어 둔다(서버 방식이 되면 닫음)
+    const pre = mode ? null : window.open("about:blank", "_blank");
     btn.disabled = true; btn.classList.add("spinning"); btn.querySelector("span").textContent = "동기화 중…";
     try {
       const r = await api("/api/drive/sync-now", { method: "POST", body: "{}" });
+      if (pre) pre.close();
+      setMode("server");
       const parts = [];
       if (r.pending) parts.push("동기화를 시작했어요. 잠시 후 다시 조회해 주세요.");
       else {
@@ -743,7 +767,14 @@
       dashboardStale = true;
       await loadCalls();
     } catch (err) {
-      toast(err.message);
+      if (err.status === 502) {
+        // 서버가 못 부름 = 회사 계정 전용 배포 → 새 탭 방식으로 전환하고 기억
+        setMode("tab");
+        syncInTab(pre);
+      } else {
+        if (pre) pre.close();
+        toast(err.message);
+      }
     } finally {
       btn.disabled = false; btn.classList.remove("spinning"); btn.querySelector("span").textContent = "동기화";
     }
@@ -752,7 +783,7 @@
     const msg = $("#webapp-msg");
     try {
       const s = await api("/api/drive/webapp", { method: "POST", body: JSON.stringify({ url: $("#webapp-url").value.trim() }) });
-      state.webapp = !!s.drive_webapp_url; updateSyncButton();
+      state.webapp = !!s.drive_webapp_url; state.webappUrl = s.drive_webapp_url; setMode(null); updateSyncButton();
       msg.className = "form-msg ok";
       msg.textContent = state.webapp ? "저장했어요. 녹취 화면에서 [동기화]를 눌러 보세요." : "웹 앱 주소를 지웠어요.";
     } catch (err) { msg.className = "form-msg err"; msg.textContent = err.message; }
@@ -961,7 +992,7 @@
     $("#drive-card").hidden = !drive || state.user.role !== "admin";
     try { if (!$("#drive-folder").value) $("#drive-folder").value = localStorage.getItem("cti.driveFolder") || ""; } catch { /* 무시 */ }
     $("#webapp-url").value = s.drive_webapp_url || "";
-    state.webapp = !!s.drive_webapp_url; state.source = s.source; updateSyncButton();
+    state.webapp = !!s.drive_webapp_url; state.webappUrl = s.drive_webapp_url; state.source = s.source; updateSyncButton();
     $("#backup-card").hidden = !drive || state.user.role !== "admin";
     if (drive && state.user.role === "admin") loadDriveBackup();
     $("#ingest-now").hidden = drive || state.user.role !== "admin";

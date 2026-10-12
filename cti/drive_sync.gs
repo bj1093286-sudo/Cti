@@ -9,7 +9,8 @@
  *  이후 5분마다 새 녹취를 대시보드로 보냅니다. 녹취 파일 자체는 드라이브에 그대로 있어요.
  *
  *  [동기화] 버튼을 쓰려면(선택): 오른쪽 위 '배포' → '새 배포' → 유형 '웹 앱',
- *  실행 '나', 액세스 '모든 사용자' → 배포 → 나온 웹 앱 URL 을 대시보드 설정에 붙여넣기.
+ *  실행 '나', 액세스 '회사의 모든 사용자'(또는 '모든 사용자') → 배포 → 나온 웹 앱 URL 을
+ *  대시보드 설정에 붙여넣기.
  *
  *  대시보드에서 '백업하고 비우기'를 누르면, 다음 실행 때 그 상담원 폴더의 녹취를
  *  같은 폴더 안 '_백업/상담원' 폴더로 옮깁니다(지우지 않음, 계속 재생 가능).
@@ -60,17 +61,52 @@ function 동기화(budgetMs) {
   }
 }
 
-/** 대시보드 [동기화] 버튼이 부르는 곳(웹 앱으로 배포했을 때) */
+/**
+ * 대시보드 [동기화] 버튼이 부르는 곳(웹 앱으로 배포했을 때). 두 가지 방식:
+ *  - 대시보드 서버가 연동 키(token)로 부름 → JSON (액세스 '모든 사용자' 배포)
+ *  - 회사 계정으로 로그인한 브라우저가 새 탭으로 엶 → 결과 화면 (액세스 '회사의 모든 사용자' 배포)
+ */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (p.token !== CTI_TOKEN) return json_({ ok: false, error: '연동 키가 맞지 않아요' });
+  const byServer = !!p.token;
+  if (byServer && p.token !== CTI_TOKEN) return json_({ ok: false, error: '연동 키가 맞지 않아요' });
+  if (!byServer && !sameDomainUser_()) return page_('동기화할 수 없어요', '회사 구글 계정으로 로그인한 브라우저에서 눌러 주세요.', false);
+  let r;
   try {
-    const r = 동기화(SYNC_NOW_BUDGET_MS);
-    if (r.busy) return json_({ ok: false, busy: true, error: '이미 동기화 중이에요. 잠시 후 다시 눌러 주세요.' });
-    return json_(Object.assign({ ok: true }, r));
+    r = 동기화(byServer ? SYNC_NOW_BUDGET_MS : SYNC_TAB_BUDGET_MS);
   } catch (err) {
-    return json_({ ok: false, error: String(err).slice(0, 300) });
+    return byServer ? json_({ ok: false, error: String(err).slice(0, 300) })
+      : page_('동기화 중 문제가 생겼어요', String(err).slice(0, 300), false);
   }
+  if (r.busy) {
+    return byServer ? json_({ ok: false, busy: true, error: '이미 동기화 중이에요. 잠시 후 다시 눌러 주세요.' })
+      : page_('이미 동기화 중이에요', '잠시 후 다시 눌러 주세요.', false);
+  }
+  if (byServer) return json_(Object.assign({ ok: true }, r));
+  const lines = [r.added ? '새 녹취 ' + r.added + '건을 가져왔어요.' : '새 녹취가 없어요.'];
+  if (r.backups) lines.push('백업 ' + r.backups + '건을 처리했어요.');
+  if (r.more) lines.push('남은 녹취는 곧 이어서 가져와요.');
+  return page_('동기화했어요', lines.join(' '), true);
+}
+
+/** 웹 앱을 연 사람이 스크립트 주인과 같은 회사 도메인 계정인지 */
+function sameDomainUser_() {
+  const me = Session.getActiveUser().getEmail();
+  const owner = Session.getEffectiveUser().getEmail();
+  return !!me && !!owner && me.split('@')[1] === owner.split('@')[1];
+}
+
+function page_(title, body, ok) {
+  const esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  const html = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<div style="font-family:system-ui,-apple-system,sans-serif;max-width:420px;margin:15vh auto;padding:24px;text-align:center">' +
+    '<div style="font-size:44px">' + (ok ? '✅' : '⚠️') + '</div>' +
+    '<h2 style="margin:12px 0 8px;color:#191f28">' + esc(title) + '</h2>' +
+    '<p style="color:#4e5968;font-size:16px;line-height:1.5">' + esc(body) + '</p>' +
+    '<p style="color:#8b95a1;font-size:14px;margin-top:24px">이 탭을 닫고 대시보드로 돌아가면 목록이 새로 고쳐져요.</p>' +
+    '<a href="' + esc(CTI_URL) + '/#calls" target="_top" style="display:inline-block;margin-top:8px;padding:14px 22px;border-radius:14px;' +
+    'background:#055cf5;color:#fff;text-decoration:none;font-weight:700">대시보드로 돌아가기</a></div>';
+  return HtmlService.createHtmlOutput(html).setTitle(title);
 }
 
 function json_(o) {
@@ -112,7 +148,8 @@ function agentFolders_() {
 }
 
 const BACKUP_BUDGET_MS = 200000;    // 백업에 쓰는 최대 시간(나머지는 새 녹취 보내기)
-const SYNC_NOW_BUDGET_MS = 20000;   // [동기화] 버튼: 대시보드가 기다릴 수 있는 만큼만 하고, 나머지는 자동 실행이 이어서
+const SYNC_NOW_BUDGET_MS = 20000;   // [동기화] 버튼(서버 방식): 대시보드가 기다릴 수 있는 만큼만 하고, 나머지는 자동 실행이 이어서
+const SYNC_TAB_BUDGET_MS = 60000;   // [동기화] 버튼(새 탭 방식): 브라우저는 조금 더 기다릴 수 있음
 
 /** 대시보드에 쌓인 백업 요청 처리. 처리한 요청 수를 돌려준다. */
 function runBackups_(started, budget) {
