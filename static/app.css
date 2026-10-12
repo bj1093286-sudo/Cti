@@ -14,14 +14,14 @@
   --line: #e5e8eb;
   --fill: #f2f4f6;
   --fill-2: #e5e8eb;
-  --blue: #3182f6;
-  --blue-press: #1b64da;
-  --blue-weak: #e8f3ff;
-  --blue-text: #1b64da;
+  --blue: #055cf5;       /* 미소 브랜드 블루 */
+  --blue-press: #044ac4;
+  --blue-weak: #e7effe;
+  --blue-text: #044ac4;
   --up: #f04452;
   --up-weak: #ffeeee;
-  --down: #3182f6;
-  --down-weak: #e8f3ff;
+  --down: #055cf5;
+  --down-weak: #e7effe;
   --danger: #f04452;
   --danger-weak: #ffeeee;
   --warn-text: #b25e00;
@@ -81,7 +81,7 @@ h1, h2, h3, p { margin: 0; }
 .login { min-height: 100dvh; display: grid; place-items: center; padding: 24px 20px; background: var(--card); }
 .login-form { width: min(400px, 100%); display: grid; gap: 14px; }
 .login-head { margin-bottom: 20px; }
-.logo { width: 52px; height: 52px; border-radius: 16px; background: var(--blue); color: #fff; display: grid; place-items: center; margin-bottom: 20px; }
+.logo { width: 56px; height: 56px; border-radius: 16px; display: block; margin-bottom: 20px; }
 .login-head h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
 .login-head .sub { color: var(--text-3); margin-top: 6px; font-size: 16px; }
 .input { display: grid; gap: 6px; }
@@ -101,7 +101,8 @@ h1, h2, h3, p { margin: 0; }
   padding-top: env(safe-area-inset-top);
 }
 .topbar-inner { max-width: 1200px; margin: 0 auto; height: 60px; padding: 0 20px; display: flex; align-items: center; gap: 10px; position: relative; }
-.brand { font-weight: 800; font-size: 20px; color: var(--text); text-decoration: none; letter-spacing: -0.03em; white-space: nowrap; }
+.brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 19px; color: var(--text); text-decoration: none; letter-spacing: -0.03em; white-space: nowrap; }
+.brand img { border-radius: 8px; display: block; }
 .tabs-top { display: flex; gap: 4px; margin-left: 16px; }
 .tabs-top .nav-item { color: var(--text-3); text-decoration: none; font-weight: 600; padding: 8px 12px; border-radius: 10px; }
 .tabs-top .nav-item:hover { background: var(--fill); }

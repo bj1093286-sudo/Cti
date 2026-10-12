@@ -375,8 +375,8 @@
     const area = chart.chartArea;
     if (!area) return "transparent";
     const g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
-    g.addColorStop(0, isDark() ? "rgba(49,130,246,.35)" : "rgba(49,130,246,.18)");
-    g.addColorStop(1, "rgba(49,130,246,0)");
+    g.addColorStop(0, isDark() ? "rgba(5,92,245,.35)" : "rgba(5,92,245,.16)");
+    g.addColorStop(1, "rgba(5,92,245,0)");
     return g;
   };
 

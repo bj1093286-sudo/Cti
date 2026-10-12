@@ -31,6 +31,7 @@ from .db import connect, get_setting, get_setting_int, set_setting
 from .periods import PRESETS, resolve
 
 ROOT = Path(__file__).resolve().parent.parent
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 STATIC = ROOT / "static"
 COOKIE = "cti_session"
 
