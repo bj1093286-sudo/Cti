@@ -1,6 +1,6 @@
 # CTI 통화 대시보드
 
-상담원 통화 기록(CTI)을 집계해 보여주는 웹 대시보드입니다. Python 표준 라이브러리와 SQLite만 사용하며 별도 설치가 필요 없습니다(Python 3.10+). 차트는 `static/vendor/chart.umd.js`(Chart.js 4.4.1, MIT)를 내장해 오프라인에서도 동작합니다.
+아웃바운드 상담원의 발신 통화 기록(CTI)을 집계해 보여주는 웹 대시보드입니다. Python 표준 라이브러리와 SQLite만 사용하며 별도 설치가 필요 없습니다(Python 3.10+). 차트는 `static/vendor/chart.umd.js`(Chart.js 4.4.1, MIT)를 내장해 오프라인에서도 동작합니다.
 
 ## 실행
 
@@ -44,7 +44,7 @@ python -m cti.app                     # http://127.0.0.1:8080
 
 ## 데이터 스키마
 
-`cti/db.py` 참고. 통화는 `calls(agent_id, customer_number, direction, started_at 'YYYY-MM-DD HH:MM:SS' 로컬 시각, duration_sec)` 형태로 적재합니다.
+`cti/db.py` 참고. 통화는 `calls(agent_id, customer_number, started_at 'YYYY-MM-DD HH:MM:SS' 로컬 시각, duration_sec)` 형태로 적재합니다.
 
 ## 테스트
 

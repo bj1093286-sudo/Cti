@@ -52,11 +52,10 @@ def main() -> None:
                 if d == today and ts > datetime.now():
                     continue
                 dur = rnd.randint(1, 9) if rnd.random() < 0.12 else int(rnd.lognormvariate(5.0, 0.6))
-                rows.append((a, rnd.choice(customers), rnd.choice(["in", "in", "out"]),
-                             ts.isoformat(sep=" "), dur))
+                rows.append((a, rnd.choice(customers), ts.isoformat(sep=" "), dur))
     conn.executemany(
-        "INSERT INTO calls(agent_id, customer_number, direction, started_at, duration_sec) "
-        "VALUES (?, ?, ?, ?, ?)", rows)
+        "INSERT INTO calls(agent_id, customer_number, started_at, duration_sec) "
+        "VALUES (?, ?, ?, ?)", rows)
     conn.commit()
 
     auth.create_user(conn, "admin", "admin1234", "admin")

@@ -470,16 +470,14 @@
       options: opts,
     });
 
-    const dirLabel = { in: "수신", out: "발신" };
     $("#recent").replaceChildren(
-      el("thead", {}, el("tr", {}, ["일시", "고객번호", "구분", "통화시간"].map((h) => el("th", { scope: "col" }, h)))),
+      el("thead", {}, el("tr", {}, ["일시", "고객번호", "통화시간"].map((h) => el("th", { scope: "col" }, h)))),
       el("tbody", {}, d.recent_calls.length
         ? d.recent_calls.map((c) => el("tr", {},
           el("td", {}, c.started_at.slice(0, 16)),
           el("td", {}, c.customer_number || "–"),
-          el("td", {}, dirLabel[c.direction] || c.direction || "–"),
           el("td", {}, fmtDur(c.duration_sec))))
-        : el("tr", {}, el("td", { colspan: "4", class: "muted" }, "통화 기록이 없습니다."))));
+        : el("tr", {}, el("td", { colspan: "3", class: "muted" }, "통화 기록이 없습니다."))));
 
     const isAdmin = state.user.role === "admin" && d.sync_folder;
     $("#admin-section").hidden = !isAdmin;

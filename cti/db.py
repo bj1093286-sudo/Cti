@@ -13,11 +13,11 @@ CREATE TABLE IF NOT EXISTS agents (
     active    INTEGER NOT NULL DEFAULT 1
 );
 
+-- 아웃바운드 전용: 모든 통화는 상담원이 고객에게 건 발신 통화다.
 CREATE TABLE IF NOT EXISTS calls (
     id              INTEGER PRIMARY KEY,
     agent_id        INTEGER NOT NULL REFERENCES agents(id),
     customer_number TEXT,
-    direction       TEXT,       -- 'in' | 'out'
     started_at      TEXT NOT NULL,  -- 로컬 시각 'YYYY-MM-DD HH:MM:SS'
     duration_sec    INTEGER NOT NULL DEFAULT 0
 );

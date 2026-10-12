@@ -201,7 +201,7 @@ def agent_detail(conn, agent_id: int, p: Period, min_sec: int, recent_limit: int
     by_d = {r["d"]: r for r in rows}
     recent = conn.execute(
         """
-        SELECT id, started_at, customer_number, direction, duration_sec
+        SELECT id, started_at, customer_number, duration_sec
         FROM calls WHERE agent_id = ? ORDER BY started_at DESC LIMIT ?
         """,
         (agent_id, recent_limit),
