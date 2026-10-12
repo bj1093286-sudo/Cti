@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth, backup, dashboard, ingest
+from . import auth, backup, dashboard, demo, ingest
 from .db import connect, get_setting_int, set_setting
 from .periods import PRESETS, resolve
 
@@ -33,21 +33,47 @@ STATIC = ROOT / "static"
 COOKIE = "cti_session"
 
 
+ON_VERCEL = bool(os.environ.get("VERCEL"))
+
+
 class Config:
-    def __init__(self, db_path: Path, sync_root: Path, backup_root: Path, today=date.today):
+    def __init__(self, db_path: Path, sync_root: Path, backup_root: Path, today=date.today,
+                 demo: bool = False):
         self.db_path = db_path
         self.sync_root = sync_root
         self.backup_root = backup_root
         self.today = today
+        self.demo = demo  # 가짜 데이터로 채운 화면 확인용 모드
 
     @classmethod
     def from_env(cls) -> "Config":
-        data = ROOT / "data"
+        # Vercel 은 /tmp 만 쓸 수 있고 인스턴스가 바뀌면 지워진다 → 영구 DB 연결 전까지는 데모 모드
+        data = Path("/tmp/cti") if ON_VERCEL else ROOT / "data"
+        demo_default = "1" if ON_VERCEL else "0"
         return cls(
             Path(os.environ.get("CTI_DB", data / "cti.db")),
             Path(os.environ.get("CTI_SYNC_ROOT", data / "sync")),
             Path(os.environ.get("CTI_BACKUP_ROOT", data / "backup")),
+            demo=os.environ.get("CTI_DEMO", demo_default) == "1",
         )
+
+
+def bootstrap(cfg: Config) -> None:
+    """서버 시작 시 준비: 스키마, (데모 모드면) 가짜 데이터, 관리자 계정."""
+    cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = connect(cfg.db_path)
+    try:
+        if cfg.demo and conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0:
+            demo.seed(conn)
+        if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
+            # 콘솔이 없는 환경(Vercel)용: 환경 변수로 첫 관리자 계정을 만든다
+            pw = os.environ.get("CTI_ADMIN_PASSWORD")
+            if pw:
+                auth.create_user(conn, os.environ.get("CTI_ADMIN_USER", "admin"), pw, "admin")
+            elif cfg.demo:
+                demo.create_demo_users(conn)
+    finally:
+        conn.close()
 
 
 class ApiError(Exception):
@@ -202,8 +228,10 @@ def make_handler(cfg: Config):
                                    "비밀번호를 여러 번 틀려 5분 동안 로그인할 수 없습니다.")
                 if not token:
                     raise ApiError(HTTPStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.")
-                user = auth.user_for_token(conn, token)
+                user = {**auth.user_for_token(conn, token), "demo": cfg.demo}
                 cookie = f"{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200"
+                if self.headers.get("X-Forwarded-Proto") == "https":
+                    cookie += "; Secure"
                 return self._send_json(200, user, {"Set-Cookie": cookie})
 
             user = auth.user_for_token(conn, self._token())
@@ -215,7 +243,7 @@ def make_handler(cfg: Config):
                 return self._send_json(200, {"ok": True},
                                        {"Set-Cookie": f"{COOKIE}=; Path=/; Max-Age=0"})
             if method == "GET" and path == "/api/me":
-                return self._send_json(200, user)
+                return self._send_json(200, {**user, "demo": cfg.demo})
             if method == "GET" and path == "/api/agents":
                 rows = conn.execute(
                     "SELECT id, name, extension FROM agents WHERE active = 1 ORDER BY name").fetchall()
@@ -303,6 +331,7 @@ def main() -> None:
     host = os.environ.get("CTI_HOST", "127.0.0.1")
     port = int(os.environ.get("CTI_PORT", "8080"))
     interval = int(os.environ.get("CTI_INGEST_INTERVAL", "300"))
+    bootstrap(cfg)
     httpd = ThreadingHTTPServer((host, port), make_handler(cfg))
     if interval > 0:
         threading.Thread(target=_ingest_loop, args=(cfg, interval), daemon=True).start()

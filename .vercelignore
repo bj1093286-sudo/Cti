@@ -1,0 +1,4 @@
+data/
+tests/
+*.bat
+__pycache__/

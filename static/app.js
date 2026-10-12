@@ -153,6 +153,7 @@
     $("#login-view").hidden = true;
     $("#app-view").hidden = false;
     $("#user-label").textContent = `${state.user.username} (${state.user.role === "admin" ? "관리자" : "조회"})`;
+    $("#demo-badge").hidden = !state.user.demo;
     const agents = await api("/api/agents");
     agentOrder = agents.map((a) => a.id).sort((a, b) => a - b);
     const sel = $("#agent-filter");
