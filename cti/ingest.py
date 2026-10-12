@@ -34,6 +34,8 @@ _DT_PATTERNS = [
 ]
 # 전화번호: 010-1234-5678, 01012345678, 02-123-4567, +82 10 1234 5678
 _PHONE = re.compile(r"(?<![\d+])(?:\+?82[-. ]?)?(0?1[016789]|0\d{1,2})[-. ]?(\d{3,4})[-. ]?(\d{4})(?!\d)")
+# 전국 대표번호 8자리: 1588-1234, 16004112
+_REP_PHONE = re.compile(r"(?<![\d+])(1[5-9]\d{2})[-. ]?(\d{4})(?!\d)")
 
 
 @dataclass
@@ -63,6 +65,9 @@ def parse_filename(name: str) -> Parsed | None:
         return None
     m = _PHONE.search(stem)
     if not m:
+        r = _REP_PHONE.search(stem)
+        if r:
+            return Parsed(started, r.group(1) + r.group(2), f"{r.group(1)}-****")
         return Parsed(started, None, None)
     area, mid, last = m.groups()
     if not area.startswith("0"):  # +82 10 ... → 010
@@ -85,7 +90,8 @@ def source_key(conn: sqlite3.Connection, rel_path: str) -> str:
 
 def mask_name(name: str) -> str:
     """로그·화면에 보이는 파일 이름에서 전화번호 가운데를 가린다."""
-    return _PHONE.sub(lambda m: f"{m.group(1)}-****-{m.group(3)}", name)
+    name = _PHONE.sub(lambda m: f"{m.group(1)}-****-{m.group(3)}", name)
+    return _REP_PHONE.sub(lambda m: f"{m.group(1)}-****", name)
 
 
 def _agent_for_folder(conn: sqlite3.Connection, folder: str) -> int:

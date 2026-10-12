@@ -22,6 +22,9 @@ class ParseTest(unittest.TestCase):
         self.check("20261012103015_01012345678.mp3", t, "01012345678", "010-****-5678")
         self.check("2026-10-12 10-30-15 +82 10 1234 5678.m4a", t, "01012345678", "010-****-5678")
         self.check("0311234567_20261012_103015.amr", t, "0311234567", "031-****-4567")
+        # 실제 녹취 파일 이름 형식(삼성 통화 녹음, 대표번호 8자리)
+        self.check("통화 녹음 16004112_260724_140102.mp4", datetime(2026, 7, 24, 14, 1, 2), "16004112", "1600-****")
+        self.check("통화 녹음 1588-1234_261012_103015.m4a", t, "15881234", "1588-****")
 
     def test_no_phone_still_parses(self):
         p = ingest.parse_filename("녹음_20261012_051230.m4a")
@@ -33,6 +36,7 @@ class ParseTest(unittest.TestCase):
 
     def test_mask_name(self):
         self.assertEqual(ingest.mask_name("가/01012345678_x.wav"), "가/010-****-5678_x.wav")
+        self.assertEqual(ingest.mask_name("가/통화 녹음 16004112_x.mp4"), "가/통화 녹음 1600-****_x.mp4")
 
 
 class IngestTest(unittest.TestCase):

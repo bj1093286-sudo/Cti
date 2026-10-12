@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS backups (
 DEFAULT_SETTINGS = {
     "min_call_sec": "10",
     # 헤더에서 길이를 못 읽는 형식은 '파일 크기 / 비트레이트'로 통화시간을 추정한다.
-    "fallback_kbps": "64",
+    "fallback_kbps": "128",
 }
 
 
