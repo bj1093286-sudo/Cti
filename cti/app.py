@@ -5,6 +5,7 @@
 - CTI_SYNC_ROOT    상담원 동기화 폴더 루트  (기본: ./data/sync)
 - CTI_BACKUP_ROOT  백업 zip 저장 위치      (기본: ./data/backup)
 - CTI_HOST / CTI_PORT                      (기본: 127.0.0.1 / 8080)
+- CTI_INGEST_INTERVAL 녹취 폴더 자동 적재 주기(초, 0이면 끔) (기본: 300)
 """
 from __future__ import annotations
 
@@ -13,6 +14,8 @@ import mimetypes
 import os
 import re
 import sqlite3
+import threading
+import time
 from datetime import date
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -20,8 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth, backup, dashboard
-from .db import connect, get_setting_int
+from . import auth, backup, dashboard, ingest
+from .db import connect, get_setting_int, set_setting
 from .periods import PRESETS, resolve
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -80,18 +83,26 @@ def _parse_agent(q: dict) -> int | None:
     return int(v)
 
 
-MIN_CALL_SEC_MAX = 600
+# 화면에서 바꿀 수 있는 설정과 허용 범위
+EDITABLE_SETTINGS = {"min_call_sec": (0, 600), "fallback_kbps": (8, 512)}
 
 
 def _save_settings(conn: sqlite3.Connection, body: dict) -> None:
-    if "min_call_sec" not in body:
+    changes = {k: body[k] for k in EDITABLE_SETTINGS if k in body}
+    if not changes:
         raise ApiError(HTTPStatus.BAD_REQUEST, "변경할 설정이 없습니다.")
-    v = body["min_call_sec"]
-    if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= MIN_CALL_SEC_MAX:
-        raise ApiError(HTTPStatus.BAD_REQUEST, f"min_call_sec 는 0~{MIN_CALL_SEC_MAX} 사이의 정수여야 합니다.")
-    conn.execute("INSERT INTO settings(key, value) VALUES ('min_call_sec', ?) "
-                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(v),))
+    for k, v in changes.items():
+        lo, hi = EDITABLE_SETTINGS[k]
+        if isinstance(v, bool) or not isinstance(v, int) or not lo <= v <= hi:
+            raise ApiError(HTTPStatus.BAD_REQUEST, f"{k} 는 {lo}~{hi} 사이의 정수여야 합니다.")
+    for k, v in changes.items():
+        set_setting(conn, k, str(v))
     conn.commit()
+
+
+def _settings_payload(conn: sqlite3.Connection) -> dict:
+    return {**{k: get_setting_int(conn, k) for k in EDITABLE_SETTINGS},
+            "last_ingest": ingest.last_result(conn)}
 
 
 def make_handler(cfg: Config):
@@ -209,7 +220,13 @@ def make_handler(cfg: Config):
                     if user["role"] != "admin":
                         raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 변경할 수 있습니다.")
                     _save_settings(conn, self._read_json())
-                return self._send_json(200, {"min_call_sec": get_setting_int(conn, "min_call_sec")})
+                return self._send_json(200, _settings_payload(conn))
+            if method == "POST" and path == "/api/ingest":
+                if user["role"] != "admin":
+                    raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 실행할 수 있습니다.")
+                self._read_json()
+                ingest.ingest_all(conn, cfg.sync_root)
+                return self._send_json(200, _settings_payload(conn))
             if method == "GET" and path == "/api/dashboard":
                 cur, prev = _parse_period(cfg, q)
                 return self._send_json(200, dashboard.build(conn, cur, prev, _parse_agent(q)))
@@ -243,12 +260,31 @@ def make_handler(cfg: Config):
     return Handler
 
 
+def _ingest_loop(cfg: Config, interval: int) -> None:
+    """동기화 폴더를 주기적으로 읽어 새 녹취 파일을 적재한다."""
+    while True:
+        try:
+            conn = connect(cfg.db_path)
+            try:
+                s = ingest.ingest_all(conn, cfg.sync_root)
+            finally:
+                conn.close()
+            if s["added"] or s["failed"]:
+                print(f"[적재] 추가 {s['added']}건, 해석 실패 {len(s['failed'])}건")
+        except Exception as e:  # 적재 실패가 서버를 멈추지 않도록
+            print(f"[적재] 오류: {e!r}")
+        time.sleep(interval)
+
+
 def main() -> None:
     cfg = Config.from_env()
     host = os.environ.get("CTI_HOST", "127.0.0.1")
     port = int(os.environ.get("CTI_PORT", "8080"))
+    interval = int(os.environ.get("CTI_INGEST_INTERVAL", "300"))
     httpd = ThreadingHTTPServer((host, port), make_handler(cfg))
-    print(f"CTI 대시보드: http://{host}:{port}  (DB: {cfg.db_path})")
+    if interval > 0:
+        threading.Thread(target=_ingest_loop, args=(cfg, interval), daemon=True).start()
+    print(f"CTI 대시보드: http://{host}:{port}  (DB: {cfg.db_path}, 녹취 폴더: {cfg.sync_root})")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

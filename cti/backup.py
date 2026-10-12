@@ -1,11 +1,12 @@
 """상담원 동기화 폴더 백업 후 비우기.
 
 절차
-1. 폴더 안의 파일 목록을 고정(스냅샷)한다.
-2. 스냅샷 파일들을 BACKUP_ROOT/<상담원ID>/<타임스탬프>.zip 으로 압축한다.
-3. zip 무결성 검사(testzip)와 파일 수 확인이 통과한 경우에만
+1. 폴더의 녹취 파일을 통화 기록으로 먼저 적재한다(지운 뒤에는 기록을 만들 수 없음).
+2. 최근 1분 안에 수정된(동기화 중인) 파일을 뺀 파일 목록을 고정(스냅샷)한다.
+3. 스냅샷 파일들을 BACKUP_ROOT/<상담원ID>/<타임스탬프>.zip 으로 묶는다.
+4. zip 무결성 검사(testzip)와 파일 수 확인이 통과한 경우에만
    스냅샷에 포함된 파일만 삭제한다(작업 중 새로 들어온 파일은 남긴다).
-4. 백업 이력을 기록한다.
+5. 백업 이력을 기록한다.
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ import threading
 import zipfile
 from datetime import datetime
 from pathlib import Path
+
+from . import ingest
 
 _locks: dict[int, threading.Lock] = {}
 _locks_guard = threading.Lock()
@@ -30,7 +33,7 @@ def _agent_lock(agent_id: int) -> threading.Lock:
 
 def sync_dir_for(agent: sqlite3.Row, sync_root: Path) -> Path:
     """상담원 동기화 폴더. SYNC_ROOT 밖의 경로는 거부한다(오설정으로 엉뚱한 폴더 삭제 방지)."""
-    raw = agent["sync_dir"] or str(agent["id"])
+    raw = agent["sync_dir"] or agent["name"]
     path = (sync_root / raw).resolve()
     root = sync_root.resolve()
     if path == root or root not in path.parents:
@@ -79,9 +82,13 @@ def backup_and_clear(conn: sqlite3.Connection, agent_id: int, sync_root: Path,
     try:
         if not folder.is_dir():
             raise BackupError(f"동기화 폴더가 없습니다: {folder}")
-        files = sorted(f for f in folder.rglob("*") if f.is_file())
+        # 비우기 전에 반드시 DB에 적재한다(지운 뒤에는 통화 기록을 만들 수 없음).
+        ingested = ingest.ingest_folder(conn, folder)
+        # 동기화 중인(최근 수정된) 파일은 건드리지 않고 다음 백업으로 남긴다.
+        files, recent = ingest.stable_files(folder)
         if not files:
-            raise BackupError("동기화 폴더가 이미 비어 있습니다.")
+            raise BackupError("백업할 파일이 없습니다." +
+                              (f" (동기화 중인 파일 {recent}개는 1분 뒤 다시 시도하세요)" if recent else ""))
 
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         dest_dir = backup_root / str(agent_id)
@@ -94,7 +101,7 @@ def backup_and_clear(conn: sqlite3.Connection, agent_id: int, sync_root: Path,
 
         total = 0
         try:
-            with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
                 for f in files:
                     total += f.stat().st_size
                     zf.write(f, f.relative_to(folder).as_posix())
@@ -125,6 +132,7 @@ def backup_and_clear(conn: sqlite3.Connection, agent_id: int, sync_root: Path,
         )
         conn.commit()
         return {"id": cur.lastrowid, "created_at": created, "archive_path": str(archive),
-                "file_count": len(files), "total_bytes": total, "performed_by": performed_by}
+                "file_count": len(files), "total_bytes": total, "performed_by": performed_by,
+                "ingested": ingested["added"], "unparsed": len(ingested["failed"]), "left_recent": recent}
     finally:
         lock.release()

@@ -86,6 +86,10 @@ h3 { font-size: 13px; margin: 20px 0 8px; color: var(--ink-2); font-weight: 600;
 }
 .field-row input:disabled { opacity: .7; }
 .rules { margin: 0; padding-left: 18px; line-height: 1.7; }
+.settings-card + .settings-card { margin-top: 16px; }
+.failed-list { margin: 4px 0 0; padding-left: 18px; color: var(--bad); }
+#ingest-msg.ok { color: var(--good); }
+#ingest-msg.err { color: var(--bad); }
 #settings-msg.ok { color: var(--good); }
 #settings-msg.err { color: var(--bad); }
 
@@ -201,3 +205,4 @@ h3 { font-size: 13px; margin: 20px 0 8px; color: var(--ink-2); font-weight: 600;
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi .value { font-size: 22px; }
 }
+#settings-msg:empty, #ingest-msg:empty, #backup-msg:empty { display: none; }

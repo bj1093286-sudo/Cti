@@ -104,10 +104,33 @@
           <li>이 시간 <b>미만</b>인 통화는 짧은 통화로 분류합니다.</li>
           <li>바꾸면 과거 기간을 포함한 모든 집계에 바로 적용됩니다.</li>
         </ul>
+        <label class="field">
+          <span class="field-label">용량으로 통화시간 추정 시 비트레이트</span>
+          <span class="field-row">
+            <input type="number" id="fallback-kbps" min="8" max="512" step="1" required inputmode="numeric">
+            <span>kbps</span>
+          </span>
+        </label>
+        <ul class="small muted rules">
+          <li>WAV·M4A·MP3는 파일 헤더에서 정확한 길이를 읽습니다.</li>
+          <li>그 외 형식(AMR 등)이나 헤더가 깨진 파일만 <b>파일 크기 ÷ 비트레이트</b>로 계산합니다.</li>
+        </ul>
         <p id="settings-readonly" class="small muted" hidden>관리자만 변경할 수 있습니다.</p>
         <p id="settings-msg" class="small" role="status"></p>
         <div><button type="submit" id="settings-save" class="btn primary">저장</button></div>
       </form>
+
+      <section class="card settings-card">
+        <h2>녹취 파일 가져오기</h2>
+        <ul class="small muted rules">
+          <li>동기화 폴더의 <b>최상위 폴더 이름 = 상담원</b>, 파일 이름에서 고객번호와 시작 일시를 읽습니다.</li>
+          <li>5분마다 자동으로 가져오며, 백업 후 비우기 직전에도 먼저 가져옵니다.</li>
+          <li>고객번호 원문은 저장하지 않습니다(가운데 마스킹 + 중복 집계용 암호화 키만 저장).</li>
+        </ul>
+        <div id="ingest-status" class="sync-status"></div>
+        <div><button type="button" id="ingest-now" class="btn">지금 가져오기</button></div>
+        <p id="ingest-msg" class="small" role="status"></p>
+      </section>
     </main>
   </div>
 

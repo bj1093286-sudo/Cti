@@ -188,32 +188,74 @@
   window.addEventListener("hashchange", route);
 
   // ---------- 설정 ----------
+  const SETTING_FIELDS = [
+    { key: "min_call_sec", input: "#min-call-sec", min: 0, max: 600, label: "최소 통화시간" },
+    { key: "fallback_kbps", input: "#fallback-kbps", min: 8, max: 512, label: "비트레이트" },
+  ];
+  function fillSettings(s) {
+    for (const f of SETTING_FIELDS) $(f.input).value = s[f.key];
+    renderIngestStatus(s.last_ingest);
+  }
   async function loadSettings() {
     const isAdmin = state.user.role === "admin";
-    const input = $("#min-call-sec"), msg = $("#settings-msg");
+    const msg = $("#settings-msg");
     msg.textContent = ""; msg.className = "small";
-    input.disabled = !isAdmin;
+    $("#ingest-msg").textContent = "";
+    for (const f of SETTING_FIELDS) $(f.input).disabled = !isAdmin;
     $("#settings-save").hidden = !isAdmin;
+    $("#ingest-now").hidden = !isAdmin;
     $("#settings-readonly").hidden = isAdmin;
     try {
-      input.value = (await api("/api/settings")).min_call_sec;
+      fillSettings(await api("/api/settings"));
     } catch (err) {
       msg.className = "small err"; msg.textContent = err.message;
     }
   }
   $("#settings-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const input = $("#min-call-sec"), msg = $("#settings-msg"), btn = $("#settings-save");
-    const v = Number(input.value);
-    if (!Number.isInteger(v) || v < 0 || v > 600) {
-      msg.className = "small err"; msg.textContent = "0~600 사이의 정수를 입력하세요."; return;
+    const msg = $("#settings-msg"), btn = $("#settings-save");
+    const body = {};
+    for (const f of SETTING_FIELDS) {
+      const v = Number($(f.input).value);
+      if ($(f.input).value === "" || !Number.isInteger(v) || v < f.min || v > f.max) {
+        msg.className = "small err"; msg.textContent = `${f.label}: ${f.min}~${f.max} 사이의 정수를 입력하세요.`; return;
+      }
+      body[f.key] = v;
     }
     btn.disabled = true;
     try {
-      const s = await api("/api/settings", { method: "POST", body: JSON.stringify({ min_call_sec: v }) });
-      input.value = s.min_call_sec;
+      const s = await api("/api/settings", { method: "POST", body: JSON.stringify(body) });
+      fillSettings(s);
       msg.className = "small ok"; msg.textContent = `저장했습니다. 이제 ${s.min_call_sec}초 이상 통화를 처리 건수로 셉니다.`;
       dashboardStale = true;
+    } catch (err) {
+      msg.className = "small err"; msg.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function renderIngestStatus(r) {
+    const box = $("#ingest-status");
+    if (!r) { box.replaceChildren(el("div", {}, "아직 가져온 적이 없습니다.")); return; }
+    const parts = [`새로 추가 ${fmtInt(r.added)}건`, `이미 있음 ${fmtInt(r.already)}건`];
+    if (r.recent) parts.push(`동기화 중이라 다음에 ${fmtInt(r.recent)}개`);
+    if (r.not_audio) parts.push(`녹취 아닌 파일 ${fmtInt(r.not_audio)}개`);
+    box.replaceChildren(...[
+      el("div", {}, `마지막 실행: ${r.at} · 상담원 폴더 ${fmtInt(r.agents)}개`),
+      el("div", {}, parts.join(" · ")),
+      r.failed_count ? el("div", { class: "error" }, `파일 이름을 해석하지 못한 파일 ${fmtInt(r.failed_count)}개 (일시가 없음):`) : null,
+      r.failed_count ? el("ul", { class: "failed-list" }, r.failed.map((f) => el("li", {}, f))) : null,
+    ].filter(Boolean));
+  }
+  $("#ingest-now").addEventListener("click", async () => {
+    const btn = $("#ingest-now"), msg = $("#ingest-msg");
+    btn.disabled = true; msg.className = "small"; msg.textContent = "가져오는 중…";
+    try {
+      const s = await api("/api/ingest", { method: "POST", body: "{}" });
+      fillSettings(s);
+      msg.className = "small ok"; msg.textContent = `완료: ${fmtInt(s.last_ingest.added)}건 추가`;
+      if (s.last_ingest.added) dashboardStale = true;
     } catch (err) {
       msg.className = "small err"; msg.textContent = err.message;
     } finally {
@@ -532,7 +574,7 @@
       el("tbody", {}, d.recent_calls.length
         ? d.recent_calls.map((c) => el("tr", {},
           el("td", {}, c.started_at.slice(0, 16)),
-          el("td", {}, c.customer_number || "–"),
+          el("td", {}, c.customer_masked || "–"),
           el("td", {}, fmtDur(c.duration_sec))))
         : el("tr", {}, el("td", { colspan: "3", class: "muted" }, "통화 기록이 없습니다."))));
 
@@ -577,7 +619,13 @@
     try {
       const r = await api(`/api/agents/${agent.id}/backup`, { method: "POST", body: "{}" });
       msg.className = "small ok";
-      msg.textContent = `완료: ${fmtInt(r.backup.file_count)}개 파일(${fmtBytes(r.backup.total_bytes)})을 백업하고 폴더를 비웠습니다.`;
+      const b = r.backup;
+      const notes = [`완료: ${fmtInt(b.file_count)}개 파일(${fmtBytes(b.total_bytes)})을 백업하고 폴더를 비웠습니다.`];
+      if (b.ingested) notes.push(`새 통화 ${fmtInt(b.ingested)}건을 먼저 기록했습니다.`);
+      if (b.left_recent) notes.push(`동기화 중인 파일 ${fmtInt(b.left_recent)}개는 남겨 두었습니다.`);
+      if (b.unparsed) notes.push(`파일 이름을 해석하지 못한 ${fmtInt(b.unparsed)}개는 통화로 기록되지 않고 백업만 되었습니다.`);
+      msg.textContent = notes.join(" ");
+      if (b.ingested) load();
       if (state.drawerAgent === agent.id) renderAdmin(agent, r.sync_folder, r.backups);
     } catch (err) {
       msg.className = "small err"; msg.textContent = err.message;

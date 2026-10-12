@@ -36,7 +36,7 @@ def kpis(conn: sqlite3.Connection, p: Period, agent_id: int | None, min_sec: int
         SELECT COUNT(*)                                             AS total_calls,
                COALESCE(SUM(duration_sec), 0)                       AS total_sec,
                AVG(CASE WHEN duration_sec >= ? THEN duration_sec END) AS att_sec,
-               COUNT(DISTINCT NULLIF(customer_number, ''))          AS customers,
+               COUNT(DISTINCT customer_key)                         AS customers,
                SUM(CASE WHEN duration_sec < ? THEN 1 ELSE 0 END)    AS short_calls
         FROM calls WHERE {where}
         """,
@@ -201,7 +201,7 @@ def agent_detail(conn, agent_id: int, p: Period, min_sec: int, recent_limit: int
     by_d = {r["d"]: r for r in rows}
     recent = conn.execute(
         """
-        SELECT id, started_at, customer_number, duration_sec
+        SELECT id, started_at, customer_masked, duration_sec
         FROM calls WHERE agent_id = ? ORDER BY started_at DESC LIMIT ?
         """,
         (agent_id, recent_limit),

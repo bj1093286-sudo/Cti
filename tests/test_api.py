@@ -10,6 +10,7 @@ from pathlib import Path
 from cti import auth
 from cti.app import Config, make_handler
 from cti.db import connect
+from tests.helpers import write_wav
 
 
 class ApiTest(unittest.TestCase):
@@ -20,14 +21,13 @@ class ApiTest(unittest.TestCase):
         cfg = Config(root / "t.db", root / "sync", root / "backup", today=lambda: date(2026, 10, 12))
         conn = connect(cfg.db_path)
         conn.execute("INSERT INTO agents(id, name) VALUES (1, '가')")
-        conn.execute("INSERT INTO calls(agent_id, customer_number, started_at, duration_sec) "
+        conn.execute("INSERT INTO calls(agent_id, customer_key, started_at, duration_sec) "
                      "VALUES (1, 'A', '2026-10-12 10:00:00', 60)")
         conn.commit()
         auth.create_user(conn, "admin", "pw-admin", "admin")
         auth.create_user(conn, "viewer", "pw-viewer", "viewer")
         conn.close()
-        (cfg.sync_root / "1").mkdir(parents=True)
-        (cfg.sync_root / "1" / "r.wav").write_bytes(b"z" * 10)
+        write_wav(cfg.sync_root / "가" / "01012345678_20261011_110000.wav", 30)
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(cfg))
         cls.port = cls.httpd.server_address[1]
         threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
@@ -94,6 +94,9 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(d["sync_folder"]["file_count"], 1)
         status, r, _ = self.req("POST", "/api/agents/1/backup", {}, token=t)
         self.assertEqual(status, 200, r)
+        self.assertEqual(r["backup"]["ingested"], 1)
+        _, d, _ = self.req("GET", "/api/agents/1?preset=today", token=t)
+        self.assertIn("010-****-5678", [c["customer_masked"] for c in d["recent_calls"]])
         self.assertEqual(r["sync_folder"]["file_count"], 0)
         self.assertEqual(len(r["backups"]), 1)
         # 다시 실행하면 빈 폴더라 409
@@ -109,6 +112,8 @@ class ApiTest(unittest.TestCase):
         for bad in (-1, 601, "30", 1.5, True, None):
             self.assertEqual(self.req("POST", "/api/settings", {"min_call_sec": bad}, token=a)[0], 400, bad)
         self.assertEqual(self.req("POST", "/api/settings", {}, token=a)[0], 400)
+        self.assertEqual(self.req("POST", "/api/settings", {"fallback_kbps": 4}, token=a)[0], 400)
+        self.assertNotIn("customer_hash_key", s)
         try:
             status, s, _ = self.req("POST", "/api/settings", {"min_call_sec": 120}, token=a)
             self.assertEqual((status, s["min_call_sec"]), (200, 120))
@@ -119,6 +124,14 @@ class ApiTest(unittest.TestCase):
             self.assertIsNone(d["kpis"]["att_sec"]["value"])
         finally:
             self.req("POST", "/api/settings", {"min_call_sec": 10}, token=a)
+
+    def test_ingest_endpoint(self):
+        v = self.login("viewer", "pw-viewer")
+        self.assertEqual(self.req("POST", "/api/ingest", {}, token=v)[0], 403)
+        a = self.login("admin", "pw-admin")
+        status, s, _ = self.req("POST", "/api/ingest", {}, token=a)
+        self.assertEqual(status, 200)
+        self.assertIsNotNone(s["last_ingest"]["at"])
 
     def test_static_and_traversal(self):
         self.assertEqual(self.req("GET", "/")[0], 200)

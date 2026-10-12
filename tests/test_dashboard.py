@@ -19,7 +19,7 @@ def make_db():
         (2, "D", "2026-10-13 00:00:00", 70),     # 다음 날 → 제외
     ]
     conn.executemany(
-        "INSERT INTO calls(agent_id, customer_number, started_at, duration_sec) VALUES (?, ?, ?, ?)", calls)
+        "INSERT INTO calls(agent_id, customer_key, started_at, duration_sec) VALUES (?, NULLIF(?, ''), ?, ?)", calls)
     conn.commit()
     return conn
 
