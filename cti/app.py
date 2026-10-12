@@ -329,10 +329,15 @@ def make_handler(cfg: Config):
                         raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 변경할 수 있습니다.")
                     _save_settings(conn, self._read_json())
                 return self._send_json(200, _settings_payload(conn))
-            if method == "GET" and path == "/api/drive/backup":
+            if path in ("/api/drive/backup", "/api/drive/backup/all"):
                 if user["role"] != "admin":
-                    raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 볼 수 있어요.")
-                return self._send_json(200, drive_backup.overview(conn))
+                    raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 할 수 있어요.")
+                if method == "POST" and path.endswith("/all"):
+                    self._read_json()
+                    n = drive_backup.request_all(conn, user["username"])
+                    return self._send_json(200, {**drive_backup.overview(conn), "requested": n})
+                if method == "GET" and not path.endswith("/all"):
+                    return self._send_json(200, drive_backup.overview(conn))
             if method == "GET" and path == "/api/drive/script":
                 if user["role"] != "admin":
                     raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 볼 수 있어요.")

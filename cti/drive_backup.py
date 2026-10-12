@@ -32,6 +32,19 @@ def request(conn, agent_id: int, requested_by: str) -> dict:
     return dict(conn.execute("SELECT * FROM drive_tasks WHERE id = ?", (tid,)).fetchone())
 
 
+def request_all(conn, requested_by: str) -> int:
+    """백업 안 한 녹취가 있는 모든 상담원을 한 번에 요청. 새로 요청한 수를 돌려준다."""
+    rows = conn.execute(
+        """
+        SELECT DISTINCT c.agent_id FROM calls c JOIN agents a ON a.id = c.agent_id
+        WHERE a.active = 1 AND c.drive_file_id IS NOT NULL AND c.drive_file_id <> 'demo' AND c.archived_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM drive_tasks t WHERE t.agent_id = c.agent_id AND t.status = 'pending')
+        """).fetchall()
+    for r in rows:
+        request(conn, r[0], requested_by)
+    return len(rows)
+
+
 def pending(conn) -> list[dict]:
     """Apps Script 가 처리할 요청: 상담원 폴더 이름과 함께."""
     rows = conn.execute(

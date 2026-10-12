@@ -909,7 +909,26 @@
   async function loadDriveBackup() {
     try { renderDriveBackup(await api("/api/drive/backup")); } catch (err) { toast(err.message); }
   }
+  $("#backup-all").addEventListener("click", async () => {
+    const o = state.backupOverview;
+    const targets = (o?.agents || []).filter((a) => a.waiting && !a.pending);
+    if (!targets.length) return toast("백업할 녹취가 없어요.");
+    const n = targets.reduce((s, a) => s + a.waiting, 0);
+    const ok = await ask(`상담원 ${fmtInt(targets.length)}명, 녹취 ${fmtInt(n)}개를 모두 백업할까요?`,
+      "드라이브의 _백업 폴더로 옮겨서 상담원 폴더를 비워요. 지우지 않으니 계속 들을 수 있어요.", "전체 백업");
+    if (!ok) return;
+    try {
+      const r = await api("/api/drive/backup/all", { method: "POST", body: "{}" });
+      renderDriveBackup(r);
+      toast(`상담원 ${fmtInt(r.requested)}명 백업을 요청했어요. 5분 안에 처리돼요.`);
+    } catch (err) { toast(err.message); }
+  });
   function renderDriveBackup(o) {
+    state.backupOverview = o;
+    const waitingAll = o.agents.filter((a) => a.waiting && !a.pending);
+    $("#backup-all").disabled = !waitingAll.length;
+    $("#backup-all").textContent = waitingAll.length
+      ? `전체 백업 · 녹취 ${fmtInt(waitingAll.reduce((s, a) => s + a.waiting, 0))}개` : "전체 백업";
     $("#backup-agents").replaceChildren(...(o.agents.length ? o.agents.map((a) => el("li", {},
       el("span", { class: "avatar" }, a.name.slice(0, 1)),
       el("div", { class: "main" },
