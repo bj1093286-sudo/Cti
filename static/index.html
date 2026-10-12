@@ -23,7 +23,8 @@
   <div id="app-view" class="app" hidden>
     <header class="topbar">
       <nav class="menu">
-        <a class="menu-item active" href="#dashboard">대시보드</a>
+        <a class="menu-item" href="#dashboard" data-view="dashboard">대시보드</a>
+        <a class="menu-item" href="#settings" data-view="settings">설정</a>
       </nav>
       <div class="user">
         <span id="user-label"></span>
@@ -31,7 +32,7 @@
       </div>
     </header>
 
-    <main class="content">
+    <main class="content" id="dashboard-view">
       <!-- 필터 -->
       <div class="filters">
         <div class="seg" role="radiogroup" aria-label="기간">
@@ -85,6 +86,28 @@
         <div class="card-head"><h2>상담원별 실적</h2><span class="muted small">열 제목을 눌러 정렬</span></div>
         <div class="table-scroll"><table id="perf" class="table sortable"></table></div>
       </section>
+    </main>
+
+    <!-- 설정 -->
+    <main class="content" id="settings-view" hidden>
+      <form id="settings-form" class="card settings-card" novalidate>
+        <h2>통화 기준</h2>
+        <label class="field">
+          <span class="field-label">처리 건수 최소 통화시간 (min_call_sec)</span>
+          <span class="field-row">
+            <input type="number" id="min-call-sec" min="0" max="600" step="1" required inputmode="numeric">
+            <span>초</span>
+          </span>
+        </label>
+        <ul class="small muted rules">
+          <li>이 시간 <b>이상</b>인 통화를 처리 건수로 셉니다. ATT도 이 통화들로만 계산합니다.</li>
+          <li>이 시간 <b>미만</b>인 통화는 짧은 통화로 분류합니다.</li>
+          <li>바꾸면 과거 기간을 포함한 모든 집계에 바로 적용됩니다.</li>
+        </ul>
+        <p id="settings-readonly" class="small muted" hidden>관리자만 변경할 수 있습니다.</p>
+        <p id="settings-msg" class="small" role="status"></p>
+        <div><button type="submit" id="settings-save" class="btn primary">저장</button></div>
+      </form>
     </main>
   </div>
 

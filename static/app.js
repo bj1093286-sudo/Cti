@@ -161,8 +161,65 @@
     if (!agents.some((a) => String(a.id) === String(state.agentId))) state.agentId = "";
     sel.value = state.agentId;
     syncFilterUI();
-    await load();
+    dashboardStale = true;
+    await route();
   }
+
+  // ---------- 메뉴(해시 라우팅) ----------
+  const VIEWS = ["dashboard", "settings"];
+  let dashboardStale = true;
+  async function route() {
+    if (!state.user) return;
+    const view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard";
+    document.querySelectorAll(".menu-item").forEach((a) => {
+      const on = a.dataset.view === view;
+      a.classList.toggle("active", on);
+      if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    $("#dashboard-view").hidden = view !== "dashboard";
+    $("#settings-view").hidden = view !== "settings";
+    if (view === "dashboard") {
+      if (dashboardStale) { dashboardStale = false; await load(); }
+    } else {
+      closeDrawer();
+      await loadSettings();
+    }
+  }
+  window.addEventListener("hashchange", route);
+
+  // ---------- 설정 ----------
+  async function loadSettings() {
+    const isAdmin = state.user.role === "admin";
+    const input = $("#min-call-sec"), msg = $("#settings-msg");
+    msg.textContent = ""; msg.className = "small";
+    input.disabled = !isAdmin;
+    $("#settings-save").hidden = !isAdmin;
+    $("#settings-readonly").hidden = isAdmin;
+    try {
+      input.value = (await api("/api/settings")).min_call_sec;
+    } catch (err) {
+      msg.className = "small err"; msg.textContent = err.message;
+    }
+  }
+  $("#settings-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("#min-call-sec"), msg = $("#settings-msg"), btn = $("#settings-save");
+    const v = Number(input.value);
+    if (!Number.isInteger(v) || v < 0 || v > 600) {
+      msg.className = "small err"; msg.textContent = "0~600 사이의 정수를 입력하세요."; return;
+    }
+    btn.disabled = true;
+    try {
+      const s = await api("/api/settings", { method: "POST", body: JSON.stringify({ min_call_sec: v }) });
+      input.value = s.min_call_sec;
+      msg.className = "small ok"; msg.textContent = `저장했습니다. 이제 ${s.min_call_sec}초 이상 통화를 처리 건수로 셉니다.`;
+      dashboardStale = true;
+    } catch (err) {
+      msg.className = "small err"; msg.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // ---------- 필터 ----------
   const todayIso = () => {

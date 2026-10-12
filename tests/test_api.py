@@ -99,6 +99,27 @@ class ApiTest(unittest.TestCase):
         # 다시 실행하면 빈 폴더라 409
         self.assertEqual(self.req("POST", "/api/agents/1/backup", {}, token=t)[0], 409)
 
+    def test_settings(self):
+        v = self.login("viewer", "pw-viewer")
+        status, s, _ = self.req("GET", "/api/settings", token=v)
+        self.assertEqual((status, s["min_call_sec"]), (200, 10))
+        self.assertEqual(self.req("POST", "/api/settings", {"min_call_sec": 30}, token=v)[0], 403)
+
+        a = self.login("admin", "pw-admin")
+        for bad in (-1, 601, "30", 1.5, True, None):
+            self.assertEqual(self.req("POST", "/api/settings", {"min_call_sec": bad}, token=a)[0], 400, bad)
+        self.assertEqual(self.req("POST", "/api/settings", {}, token=a)[0], 400)
+        try:
+            status, s, _ = self.req("POST", "/api/settings", {"min_call_sec": 120}, token=a)
+            self.assertEqual((status, s["min_call_sec"]), (200, 120))
+            # 기준 변경이 대시보드에 반영된다: 60초 통화가 짧은 통화가 됨
+            _, d, _ = self.req("GET", "/api/dashboard?preset=today", token=a)
+            self.assertEqual(d["min_call_sec"], 120)
+            self.assertEqual(d["kpis"]["short_ratio"]["value"], 1.0)
+            self.assertIsNone(d["kpis"]["att_sec"]["value"])
+        finally:
+            self.req("POST", "/api/settings", {"min_call_sec": 10}, token=a)
+
     def test_static_and_traversal(self):
         self.assertEqual(self.req("GET", "/")[0], 200)
         self.assertEqual(self.req("GET", "/static/app.js")[0], 200)

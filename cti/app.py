@@ -80,6 +80,20 @@ def _parse_agent(q: dict) -> int | None:
     return int(v)
 
 
+MIN_CALL_SEC_MAX = 600
+
+
+def _save_settings(conn: sqlite3.Connection, body: dict) -> None:
+    if "min_call_sec" not in body:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "변경할 설정이 없습니다.")
+    v = body["min_call_sec"]
+    if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= MIN_CALL_SEC_MAX:
+        raise ApiError(HTTPStatus.BAD_REQUEST, f"min_call_sec 는 0~{MIN_CALL_SEC_MAX} 사이의 정수여야 합니다.")
+    conn.execute("INSERT INTO settings(key, value) VALUES ('min_call_sec', ?) "
+                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(v),))
+    conn.commit()
+
+
 def make_handler(cfg: Config):
     cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
     connect(cfg.db_path).close()  # 스키마 초기화
@@ -190,6 +204,12 @@ def make_handler(cfg: Config):
                 rows = conn.execute(
                     "SELECT id, name, extension FROM agents WHERE active = 1 ORDER BY name").fetchall()
                 return self._send_json(200, [dict(r) for r in rows])
+            if path == "/api/settings":
+                if method == "POST":
+                    if user["role"] != "admin":
+                        raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 변경할 수 있습니다.")
+                    _save_settings(conn, self._read_json())
+                return self._send_json(200, {"min_call_sec": get_setting_int(conn, "min_call_sec")})
             if method == "GET" and path == "/api/dashboard":
                 cur, prev = _parse_period(cfg, q)
                 return self._send_json(200, dashboard.build(conn, cur, prev, _parse_agent(q)))
