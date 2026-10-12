@@ -210,7 +210,11 @@
     sel.value = state.agentId;
     syncFilterUI();
     setupLookup();
-    try { state.minSec = (await api("/api/settings")).min_call_sec; } catch { state.minSec = 0; }
+    try {
+      const st = await api("/api/settings");
+      state.minSec = st.min_call_sec; state.source = st.source; state.webapp = !!st.drive_webapp_url;
+    } catch { state.minSec = 0; }
+    updateSyncButton();
     dashboardStale = true;
     callsLoaded = false;
     await route();
@@ -717,6 +721,43 @@
   }
   $("#lk-start").addEventListener("change", markQuickDate);
   $("#lk-end").addEventListener("change", markQuickDate);
+  // ---------- [동기화] 버튼 ----------
+  function updateSyncButton() {
+    // 드라이브 연결일 때만. 웹 앱 주소가 없으면 관리자에게만 보여서 설정으로 안내
+    $("#sync-now").hidden = state.source !== "drive" || (!state.webapp && state.user?.role !== "admin");
+  }
+  $("#sync-now").addEventListener("click", async () => {
+    const btn = $("#sync-now");
+    if (!state.webapp) { toast("설정에서 웹 앱 주소를 먼저 넣어 주세요."); location.hash = "#settings"; return; }
+    btn.disabled = true; btn.classList.add("spinning"); btn.querySelector("span").textContent = "동기화 중…";
+    try {
+      const r = await api("/api/drive/sync-now", { method: "POST", body: "{}" });
+      const parts = [];
+      if (r.pending) parts.push("동기화를 시작했어요. 잠시 후 다시 조회해 주세요.");
+      else {
+        parts.push(r.added ? `새 녹취 ${fmtInt(r.added)}건을 가져왔어요.` : "새 녹취가 없어요.");
+        if (r.backups) parts.push(`백업 ${fmtInt(r.backups)}건을 처리했어요.`);
+        if (r.more) parts.push("남은 건 곧 이어서 가져와요.");
+      }
+      toast(parts.join(" "));
+      dashboardStale = true;
+      await loadCalls();
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      btn.disabled = false; btn.classList.remove("spinning"); btn.querySelector("span").textContent = "동기화";
+    }
+  });
+  $("#webapp-save").addEventListener("click", async () => {
+    const msg = $("#webapp-msg");
+    try {
+      const s = await api("/api/drive/webapp", { method: "POST", body: JSON.stringify({ url: $("#webapp-url").value.trim() }) });
+      state.webapp = !!s.drive_webapp_url; updateSyncButton();
+      msg.className = "form-msg ok";
+      msg.textContent = state.webapp ? "저장했어요. 녹취 화면에서 [동기화]를 눌러 보세요." : "웹 앱 주소를 지웠어요.";
+    } catch (err) { msg.className = "form-msg err"; msg.textContent = err.message; }
+  });
+
   $("#lookup-reset").addEventListener("click", () => { resetLookup(); $("#lookup-err").textContent = ""; loadCalls(); });
 
   $("#lookup").addEventListener("submit", (e) => {
@@ -919,6 +960,8 @@
     const drive = s.source === "drive";
     $("#drive-card").hidden = !drive || state.user.role !== "admin";
     try { if (!$("#drive-folder").value) $("#drive-folder").value = localStorage.getItem("cti.driveFolder") || ""; } catch { /* 무시 */ }
+    $("#webapp-url").value = s.drive_webapp_url || "";
+    state.webapp = !!s.drive_webapp_url; state.source = s.source; updateSyncButton();
     $("#backup-card").hidden = !drive || state.user.role !== "admin";
     if (drive && state.user.role === "admin") loadDriveBackup();
     $("#ingest-now").hidden = drive || state.user.role !== "admin";

@@ -19,6 +19,9 @@ import socket
 import sqlite3
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import date
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -174,9 +177,35 @@ def drive_script(conn, base_url: str) -> str:
     return tpl.replace("{{CTI_URL}}", base_url).replace("{{CTI_TOKEN}}", drive_token(conn))
 
 
+WEBAPP_RE = re.compile(r"https://script\.google\.com/(a/macros/[^/]+|macros)/s/[A-Za-z0-9_-]+/exec")
+
+
+def drive_sync_now(conn) -> dict:
+    """[동기화] 버튼: Apps Script 웹 앱을 불러 바로 동기화(최대 약 25초)."""
+    url = get_setting(conn, "drive_webapp_url")
+    if not url:
+        raise ApiError(HTTPStatus.CONFLICT, "설정 > 구글 드라이브 연결에서 동기화 주소(웹 앱 URL)를 먼저 넣어 주세요.")
+    full = f"{url}?{urllib.parse.urlencode({'token': drive_token(conn), 'action': 'sync'})}"
+    try:
+        with urllib.request.urlopen(full, timeout=27) as r:  # 구글이 결과 주소로 넘겨줌(자동으로 따라감)
+            data = json.loads(r.read().decode("utf-8"))
+    except TimeoutError:
+        return {"ok": True, "pending": True}
+    except (urllib.error.URLError, ValueError) as e:
+        if isinstance(getattr(e, "reason", None), TimeoutError):
+            return {"ok": True, "pending": True}
+        raise ApiError(HTTPStatus.BAD_GATEWAY,
+                       "구글 스크립트를 부르지 못했어요. 웹 앱 배포의 액세스를 '모든 사용자'로 했는지 확인해 주세요.")
+    if not data.get("ok"):
+        raise ApiError(HTTPStatus.CONFLICT if data.get("busy") else HTTPStatus.BAD_GATEWAY,
+                       data.get("error") or "동기화에 실패했어요.")
+    return data
+
+
 def _settings_payload(conn: sqlite3.Connection) -> dict:
     return {**{k: get_setting_int(conn, k) for k in EDITABLE_SETTINGS},
-            "last_ingest": ingest.last_result(conn), "source": SOURCE}
+            "last_ingest": ingest.last_result(conn), "source": SOURCE,
+            "drive_webapp_url": get_setting(conn, "drive_webapp_url") or ""}
 
 
 def make_handler(cfg: Config):
@@ -376,6 +405,19 @@ def make_handler(cfg: Config):
                     return self._send_json(200, {**drive_backup.overview(conn), "requested": n})
                 if method == "GET" and not path.endswith("/all"):
                     return self._send_json(200, drive_backup.overview(conn))
+            if method == "POST" and path == "/api/drive/webapp":
+                if user["role"] != "admin":
+                    raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 바꿀 수 있어요.")
+                url = str(self._read_json().get("url", "")).strip()
+                if url and not WEBAPP_RE.fullmatch(url):
+                    raise ApiError(HTTPStatus.BAD_REQUEST,
+                                   "웹 앱 URL 은 https://script.google.com/macros/s/…/exec 모양이에요.")
+                set_setting(conn, "drive_webapp_url", url)
+                conn.commit()
+                return self._send_json(200, _settings_payload(conn))
+            if method == "POST" and path == "/api/drive/sync-now":
+                self._read_json()
+                return self._send_json(200, drive_sync_now(conn))
             if method == "GET" and path == "/api/drive/script":
                 if user["role"] != "admin":
                     raise ApiError(HTTPStatus.FORBIDDEN, "관리자만 볼 수 있어요.")

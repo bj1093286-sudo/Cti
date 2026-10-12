@@ -278,6 +278,10 @@ h1, h2, h3, p { margin: 0; }
 .lookup { margin: 4px 0 16px; }
 .lookup-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .lookup-head h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; }
+.head-actions { display: flex; align-items: center; gap: 4px; }
+.btn-sync { height: 34px; padding: 0 12px; font-size: 14px; border-radius: 10px; gap: 4px; background: var(--blue-weak); color: var(--blue-text); }
+.btn-sync.spinning svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .link-btn { border: 0; background: transparent; color: var(--text-3); font-weight: 600; font-size: 14px; padding: 8px; }
 .lk-row { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .lk-label { font-weight: 600; color: var(--text-2); padding-top: 11px; font-size: 15px; }

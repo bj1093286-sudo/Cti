@@ -8,6 +8,9 @@
  *  3. 위쪽 함수 목록에서 '설치' 선택 → 실행 → 권한 허용
  *  이후 5분마다 새 녹취를 대시보드로 보냅니다. 녹취 파일 자체는 드라이브에 그대로 있어요.
  *
+ *  [동기화] 버튼을 쓰려면(선택): 오른쪽 위 '배포' → '새 배포' → 유형 '웹 앱',
+ *  실행 '나', 액세스 '모든 사용자' → 배포 → 나온 웹 앱 URL 을 대시보드 설정에 붙여넣기.
+ *
  *  대시보드에서 '백업하고 비우기'를 누르면, 다음 실행 때 그 상담원 폴더의 녹취를
  *  같은 폴더 안 '_백업/상담원' 폴더로 옮깁니다(지우지 않음, 계속 재생 가능).
  */
@@ -34,15 +37,47 @@ function 전체다시보내기() {
   동기화();
 }
 
-function 동기화() {
-  const started = Date.now();
-  // 1) 대시보드에서 누른 백업 요청부터 처리(오래 기다리지 않게)
-  try { runBackups_(started); } catch (e) { console.error('백업 처리 중 오류: ' + e); }
-  // 2) 새 녹취 보내기
-  syncNew_(started);
+/**
+ * 5분마다 자동 실행 + 대시보드 [동기화] 버튼(웹 앱)에서도 불림.
+ * budgetMs: 이번 실행에 쓸 시간(버튼은 짧게, 자동 실행은 길게).
+ */
+function 동기화(budgetMs) {
+  const budget = typeof budgetMs === 'number' ? budgetMs : TIME_BUDGET_MS;  // 자동 실행은 이벤트 객체가 들어옴
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) { console.log('이미 동기화 중이라 건너뜀'); return { busy: true }; }
+  try {
+    const started = Date.now();
+    const result = { added: 0, backups: 0 };
+    // 1) 대시보드에서 누른 백업 요청부터 처리(오래 기다리지 않게)
+    try { result.backups = runBackups_(started, Math.min(BACKUP_BUDGET_MS, budget * 0.6)); }
+    catch (e) { console.error('백업 처리 중 오류: ' + e); }
+    // 2) 새 녹취 보내기
+    const s = syncNew_(started, budget);
+    result.added = s.added; result.found = s.found; result.sent = s.sent; result.more = s.sent < s.found;
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
-function syncNew_(started) {
+/** 대시보드 [동기화] 버튼이 부르는 곳(웹 앱으로 배포했을 때) */
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  if (p.token !== CTI_TOKEN) return json_({ ok: false, error: '연동 키가 맞지 않아요' });
+  try {
+    const r = 동기화(SYNC_NOW_BUDGET_MS);
+    if (r.busy) return json_({ ok: false, busy: true, error: '이미 동기화 중이에요. 잠시 후 다시 눌러 주세요.' });
+    return json_(Object.assign({ ok: true }, r));
+  } catch (err) {
+    return json_({ ok: false, error: String(err).slice(0, 300) });
+  }
+}
+
+function json_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function syncNew_(started, budget) {
   const props = PropertiesService.getScriptProperties();
   const since = props.getProperty('since');
   const files = [];
@@ -52,15 +87,15 @@ function syncNew_(started) {
   });
   files.sort(function (a, b) { return a.created < b.created ? -1 : 1; });
 
-  let sent = 0, newest = since, first = true;
+  let sent = 0, added = 0, newest = since, first = true;
   while (sent < files.length || first) {
     const chunk = files.slice(sent, sent + BATCH);
     chunk.forEach(function (f) { if (f.durationMs == null) f.durationMs = mp4DurationMs_(f.id, f.name); });
-    post_({ files: chunk, first: first });
+    added += post_({ files: chunk, first: first }).added || 0;
     first = false;
     sent += chunk.length;
     if (chunk.length) newest = chunk[chunk.length - 1].created;
-    if (!chunk.length || Date.now() - started > TIME_BUDGET_MS) break;
+    if (!chunk.length || Date.now() - started > budget) break;
   }
   // 다음 회차는 이번에 보낸 마지막 파일 이후부터(10분 겹치게 — 중복은 대시보드가 걸러냄)
   if (sent >= files.length) {
@@ -68,23 +103,27 @@ function syncNew_(started) {
   } else if (newest) {
     props.setProperty('since', newest);
   }
-  console.log('보낸 파일 ' + sent + ' / 찾은 파일 ' + files.length);
+  console.log('보낸 파일 ' + sent + ' / 찾은 파일 ' + files.length + ' (새로 추가 ' + added + ')');
+  return { sent: sent, found: files.length, added: added };
 }
 
 function agentFolders_() {
   return listChildren_(FOLDER_ID.trim(), true).filter(function (f) { return f.name.charAt(0) !== '_'; });
 }
 
-const BACKUP_BUDGET_MS = 200000;  // 백업에 쓰는 시간(나머지는 새 녹취 보내기)
+const BACKUP_BUDGET_MS = 200000;    // 백업에 쓰는 최대 시간(나머지는 새 녹취 보내기)
+const SYNC_NOW_BUDGET_MS = 20000;   // [동기화] 버튼: 대시보드가 기다릴 수 있는 만큼만 하고, 나머지는 자동 실행이 이어서
 
-/** 대시보드에 쌓인 백업 요청 처리 */
-function runBackups_(started) {
+/** 대시보드에 쌓인 백업 요청 처리. 처리한 요청 수를 돌려준다. */
+function runBackups_(started, budget) {
   const tasks = JSON.parse(call_('get', '/api/drive/tasks').getContentText()).tasks || [];
   if (tasks.length) console.log('백업 요청 ' + tasks.length + '건');
+  let n = 0;
   tasks.forEach(function (t) {
-    if (Date.now() - started > BACKUP_BUDGET_MS) return;  // 남은 건 다음 회차에
+    if (Date.now() - started > budget) return;  // 남은 건 다음 회차에
+    n++;
     try {
-      backupOne_(t, started);
+      backupOne_(t, started, budget);
     } catch (e) {
       console.error(t.agent + ' 백업 실패: ' + e);
       try {
@@ -92,9 +131,10 @@ function runBackups_(started) {
       } catch (e2) { /* 다음 회차에 다시 */ }
     }
   });
+  return n;
 }
 
-function backupOne_(t, started) {
+function backupOne_(t, started, budget) {
   const dir = agentFolders_().filter(function (f) { return f.name === t.agent; })[0];
   if (!dir) {
     call_('post', '/api/drive/tasks/' + t.id, { status: 'done', moved_ids: [], message: '폴더가 없어서 옮길 파일이 없었어요' });
@@ -110,7 +150,7 @@ function backupOne_(t, started) {
   const moved = [];
   let failed = 0, lastError = null, done = true;
   for (let i = 0; i < files.length; i++) {
-    if (Date.now() - started > BACKUP_BUDGET_MS) { done = false; break; }
+    if (Date.now() - started > budget) { done = false; break; }
     try { DriveApp.getFileById(files[i].id).moveTo(dest); moved.push(files[i].id); }
     catch (e) { failed++; lastError = String(e); }
   }
@@ -209,5 +249,5 @@ function parseMvhd_(b) {
 }
 
 function post_(body) {
-  call_('post', '/api/drive/push', body);
+  return JSON.parse(call_('post', '/api/drive/push', body).getContentText());
 }

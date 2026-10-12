@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400..800&display=swap">
   <title>miso internet sales 통화 대시보드</title>
-  <link rel="stylesheet" href="/static/app.css?v=20261012-5">
+  <link rel="stylesheet" href="/static/app.css?v=20261012-6">
   <script src="/static/vendor/chart.umd.js?v=4.4.1"></script>
 </head>
 <body>
@@ -72,7 +72,13 @@
       <form class="card lookup" id="lookup" novalidate>
         <div class="lookup-head">
           <h2>통화 조회</h2>
-          <button type="button" class="link-btn" id="lookup-reset">초기화</button>
+          <div class="head-actions">
+            <button type="button" class="btn btn-secondary btn-sync" id="sync-now" hidden>
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 0 0-14.6-4.5M4 4v4h4M4 13a8 8 0 0 0 14.6 4.5M20 20v-4h-4"/></svg>
+              <span>동기화</span>
+            </button>
+            <button type="button" class="link-btn" id="lookup-reset">초기화</button>
+          </div>
         </div>
 
         <div class="lk-row">
@@ -244,6 +250,19 @@
         </ol>
         <p id="drive-msg" class="form-msg" role="status"></p>
         <button type="button" id="drive-copy" class="btn btn-primary btn-lg btn-block">스크립트 복사</button>
+
+        <h3 class="sub-h">[동기화] 버튼 켜기 (선택)</h3>
+        <ol class="steps">
+          <li>스크립트 화면 오른쪽 위 <b>배포 → 새 배포</b> → 톱니바퀴에서 <b>웹 앱</b> 선택</li>
+          <li>다음 사용자 인증 정보로 실행: <b>나</b> · 액세스 권한: <b>모든 사용자</b> → <b>배포</b></li>
+          <li>나온 <b>웹 앱 URL</b>을 아래에 붙여넣고 저장하세요. 녹취 화면에 [동기화] 버튼이 생겨요.</li>
+        </ol>
+        <div class="field">
+          <input id="webapp-url" class="text-input" type="url" inputmode="url" autocomplete="off"
+                 placeholder="https://script.google.com/macros/s/…/exec">
+        </div>
+        <p id="webapp-msg" class="form-msg" role="status"></p>
+        <button type="button" id="webapp-save" class="btn btn-secondary btn-lg btn-block">웹 앱 주소 저장</button>
         <p class="help" style="margin-top:12px">연동 키는 비밀번호처럼 다뤄 주세요. 녹취 파일은 드라이브에 그대로 있고, 대시보드에는 목록 정보만 들어와요.</p>
       </section>
 
@@ -354,6 +373,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="/static/app.js?v=20261012-5"></script>
+  <script src="/static/app.js?v=20261012-6"></script>
 </body>
 </html>
