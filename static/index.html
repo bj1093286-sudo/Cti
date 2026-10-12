@@ -2,172 +2,237 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#2a78d6">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f2f4f6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101013" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="CTI 대시보드">
+  <meta name="apple-mobile-web-app-title" content="통화 대시보드">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400..700&display=swap">
-  <title>CTI 통화 대시보드</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400..800&display=swap">
+  <title>통화 대시보드</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/vendor/chart.umd.js"></script>
 </head>
 <body>
   <!-- 로그인 -->
   <section id="login-view" class="login" hidden>
-    <form id="login-form" class="card login-card">
-      <h1>CTI 통화 대시보드</h1>
-      <label>아이디 <input name="username" autocomplete="username" required></label>
-      <label>비밀번호 <input name="password" type="password" autocomplete="current-password" required></label>
-      <p id="login-error" class="error" role="alert"></p>
-      <button type="submit" class="btn primary">로그인</button>
+    <form id="login-form" class="login-form" novalidate>
+      <div class="login-head">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2Z"/></svg>
+        </div>
+        <h1>통화 대시보드</h1>
+        <p class="sub">아이디와 비밀번호를 입력해 주세요</p>
+      </div>
+      <label class="input">
+        <span>아이디</span>
+        <input name="username" autocomplete="username" autocapitalize="off" required>
+      </label>
+      <label class="input">
+        <span>비밀번호</span>
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <p id="login-error" class="form-error" role="alert"></p>
+      <button type="submit" class="btn btn-primary btn-lg btn-block">로그인</button>
     </form>
   </section>
 
   <!-- 앱 -->
   <div id="app-view" class="app" hidden>
     <header class="topbar">
-      <nav class="menu">
-        <a class="menu-item" href="#dashboard" data-view="dashboard">대시보드</a>
-        <a class="menu-item" href="#settings" data-view="settings">설정</a>
-      </nav>
-      <span id="demo-badge" class="demo-badge" hidden title="가짜 데이터로 채운 화면입니다. 구글 드라이브를 연결하면 실제 녹취로 바뀝니다.">데모 데이터</span>
-      <div class="user">
-        <span id="user-label"></span>
-        <button id="logout" class="btn ghost">로그아웃</button>
+      <div class="topbar-inner">
+        <a class="brand" href="#dashboard">통화 대시보드</a>
+        <nav class="tabs-top" aria-label="메뉴">
+          <a class="nav-item" href="#dashboard" data-view="dashboard">홈</a>
+          <a class="nav-item" href="#settings" data-view="settings">설정</a>
+        </nav>
+        <span id="demo-badge" class="pill pill-warn" hidden>데모 데이터</span>
+        <button id="user-btn" class="avatar-btn" aria-haspopup="menu" aria-expanded="false">
+          <span id="user-initial" class="avatar"></span>
+        </button>
+        <div id="user-menu" class="menu-pop" role="menu" hidden>
+          <div class="menu-who"><strong id="user-name"></strong><span id="user-role"></span></div>
+          <button id="logout" class="menu-row" role="menuitem">로그아웃</button>
+        </div>
       </div>
     </header>
 
-    <main class="content" id="dashboard-view">
-      <!-- 필터 -->
-      <div class="filters">
-        <div class="seg" role="radiogroup" aria-label="기간">
-          <button data-preset="today" class="active">오늘</button>
-          <button data-preset="yesterday">어제</button>
-          <button data-preset="this_week">이번 주</button>
-          <button data-preset="this_month">이번 달</button>
-          <button data-preset="custom">직접 지정</button>
+    <!-- 홈(대시보드) -->
+    <main class="page" id="dashboard-view">
+      <div class="filterbar">
+        <div class="chips" role="radiogroup" aria-label="기간">
+          <button class="chip" data-preset="today">오늘</button>
+          <button class="chip" data-preset="yesterday">어제</button>
+          <button class="chip" data-preset="this_week">이번 주</button>
+          <button class="chip" data-preset="this_month">이번 달</button>
+          <button class="chip" data-preset="custom">직접 지정</button>
+          <label class="chip chip-select">
+            <span id="agent-chip-label">상담원 전체</span>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M4 6l4 4 4-4z"/></svg>
+            <select id="agent-filter" aria-label="상담원"><option value="">상담원 전체</option></select>
+          </label>
         </div>
         <div id="custom-range" class="custom-range" hidden>
           <input type="date" id="start-date" aria-label="시작일">
-          <span>~</span>
+          <span class="muted">~</span>
           <input type="date" id="end-date" aria-label="종료일">
-          <button id="apply-range" class="btn">적용</button>
+          <button id="apply-range" class="btn btn-primary btn-sm">조회</button>
         </div>
-        <label class="agent-filter">상담원
-          <select id="agent-filter"><option value="">전체</option></select>
-        </label>
-        <span id="period-label" class="muted"></span>
       </div>
 
-      <!-- KPI -->
-      <section class="kpis" id="kpis"></section>
+      <div class="grid">
+        <!-- 핵심 지표 -->
+        <section class="card hero" id="hero" aria-live="polite"></section>
 
-      <!-- 차트 -->
-      <section class="grid-2">
-        <div class="card">
+        <!-- 일별 추이 -->
+        <section class="card span-2">
           <div class="card-head">
-            <h2>일별 통화량 추이</h2>
+            <div>
+              <h2>일별 통화량</h2>
+              <p class="caption" id="trend-caption"></p>
+            </div>
           </div>
-          <div id="trend-legend" class="legend" aria-label="상담원별 선 표시"></div>
-          <div class="chart-box"><canvas id="trend-chart" aria-label="일별 통화량 추이"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h2>시간대별 통화 분포</h2><span class="muted small">0~23시, 전체 통화</span></div>
+          <div id="trend-legend" class="chips chips-sm" aria-label="상담원 비교"></div>
+          <div class="chart-box" id="trend-box"><canvas id="trend-chart" aria-label="일별 통화량 추이"></canvas></div>
+          <div class="empty-state" id="trend-empty" hidden>
+            <p>하루치라 날짜별 흐름이 없어요</p>
+            <button type="button" class="btn btn-secondary" id="trend-to-week">이번 주로 보기</button>
+          </div>
+        </section>
+
+        <!-- 시간대별 -->
+        <section class="card span-2">
+          <div class="card-head">
+            <div>
+              <h2>시간대별 통화</h2>
+              <p class="caption" id="hourly-caption"></p>
+            </div>
+          </div>
           <div class="chart-box"><canvas id="hourly-chart" aria-label="시간대별 통화 분포"></canvas></div>
-        </div>
-      </section>
+        </section>
 
-      <!-- 히트맵 -->
-      <section class="card">
-        <div class="card-head">
-          <h2>일별 상담원 처리건수</h2>
-          <span class="muted small" id="matrix-note"></span>
-        </div>
-        <div class="table-scroll"><table id="matrix" class="table heatmap"></table></div>
-      </section>
+        <!-- 상담원 순위 -->
+        <section class="card rank-card">
+          <div class="card-head">
+            <div>
+              <h2>상담원 순위</h2>
+              <p class="caption">누르면 상세를 볼 수 있어요</p>
+            </div>
+          </div>
+          <div class="seg" id="rank-sort" role="tablist" aria-label="정렬 기준"></div>
+          <ol class="rank-list" id="rank-list"></ol>
+        </section>
 
-      <!-- 상담원별 실적 -->
-      <section class="card">
-        <div class="card-head"><h2>상담원별 실적</h2><span class="muted small">열 제목을 눌러 정렬</span></div>
-        <div class="table-scroll"><table id="perf" class="table sortable"></table></div>
-      </section>
+        <!-- 히트맵 -->
+        <section class="card span-2">
+          <div class="card-head">
+            <div>
+              <h2>일별 처리건수</h2>
+              <p class="caption" id="matrix-caption"></p>
+            </div>
+          </div>
+          <div class="table-scroll"><table id="matrix" class="heatmap"></table></div>
+        </section>
+      </div>
     </main>
 
     <!-- 설정 -->
-    <main class="content" id="settings-view" hidden>
-      <form id="settings-form" class="card settings-card" novalidate>
+    <main class="page page-narrow" id="settings-view" hidden>
+      <h1 class="page-title">설정</h1>
+
+      <form id="settings-form" class="card" novalidate>
         <h2>통화 기준</h2>
-        <label class="field">
-          <span class="field-label">처리 건수 최소 통화시간 (min_call_sec)</span>
-          <span class="field-row">
-            <input type="number" id="min-call-sec" min="0" max="600" step="1" required inputmode="numeric">
+        <div class="field">
+          <label for="min-call-sec">처리 건수로 셀 최소 통화시간</label>
+          <div class="input-unit">
+            <input type="number" id="min-call-sec" min="0" max="600" step="1" inputmode="numeric">
             <span>초</span>
-          </span>
-        </label>
-        <ul class="small muted rules">
-          <li>이 시간 <b>이상</b>인 통화를 처리 건수로 셉니다. ATT도 이 통화들로만 계산합니다.</li>
-          <li>이 시간 <b>미만</b>인 통화는 짧은 통화로 분류합니다.</li>
-          <li>바꾸면 과거 기간을 포함한 모든 집계에 바로 적용됩니다.</li>
-        </ul>
-        <label class="field">
-          <span class="field-label">용량으로 통화시간 추정 시 비트레이트</span>
-          <span class="field-row">
-            <input type="number" id="fallback-kbps" min="8" max="512" step="1" required inputmode="numeric">
+          </div>
+          <p class="help">이 시간 이상이면 처리 건수와 평균 통화시간에 들어가고, 미만이면 짧은 통화로 분류돼요. 바꾸면 지난 기간에도 바로 적용돼요.</p>
+        </div>
+        <div class="field">
+          <label for="fallback-kbps">파일 크기로 통화시간 추정할 때 비트레이트</label>
+          <div class="input-unit">
+            <input type="number" id="fallback-kbps" min="8" max="512" step="1" inputmode="numeric">
             <span>kbps</span>
-          </span>
-        </label>
-        <ul class="small muted rules">
-          <li>WAV·M4A·MP3는 파일 헤더에서 정확한 길이를 읽습니다.</li>
-          <li>그 외 형식(AMR 등)이나 헤더가 깨진 파일만 <b>파일 크기 ÷ 비트레이트</b>로 계산합니다.</li>
-        </ul>
-        <p id="settings-readonly" class="small muted" hidden>관리자만 변경할 수 있습니다.</p>
-        <p id="settings-msg" class="small" role="status"></p>
-        <div><button type="submit" id="settings-save" class="btn primary">저장</button></div>
+          </div>
+          <p class="help">녹취 파일에서 길이를 바로 읽지 못할 때만 써요.</p>
+        </div>
+        <p id="settings-readonly" class="notice" hidden>관리자만 바꿀 수 있어요.</p>
+        <p id="settings-msg" class="form-msg" role="status"></p>
+        <button type="submit" id="settings-save" class="btn btn-primary btn-lg btn-block">저장하기</button>
       </form>
 
-      <section class="card settings-card">
-        <h2>녹취 파일 가져오기</h2>
-        <ul class="small muted rules">
-          <li>동기화 폴더의 <b>최상위 폴더 이름 = 상담원</b>, 파일 이름에서 고객번호와 시작 일시를 읽습니다.</li>
-          <li>5분마다 자동으로 가져오며, 백업 후 비우기 직전에도 먼저 가져옵니다.</li>
-          <li>고객번호 원문은 저장하지 않습니다(가운데 마스킹 + 중복 집계용 암호화 키만 저장).</li>
-        </ul>
-        <div id="ingest-status" class="sync-status"></div>
-        <div><button type="button" id="ingest-now" class="btn">지금 가져오기</button></div>
-        <p id="ingest-msg" class="small" role="status"></p>
+      <section class="card" id="ingest-card">
+        <h2>녹취 가져오기</h2>
+        <p class="help">녹취 폴더의 <b>상담원 이름 폴더</b> 안에 있는 파일 이름에서 고객번호와 통화 시작 시각을 읽어요. 고객번호는 가운데를 가려서 저장해요.</p>
+        <div id="ingest-status" class="status-list"></div>
+        <p id="ingest-msg" class="form-msg" role="status"></p>
+        <button type="button" id="ingest-now" class="btn btn-secondary btn-lg btn-block">지금 가져오기</button>
       </section>
     </main>
+
+    <!-- 모바일 하단 탭 -->
+    <nav class="tabbar" aria-label="메뉴">
+      <a class="tab nav-item" href="#dashboard" data-view="dashboard">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z"/></svg>
+        <span>홈</span>
+      </a>
+      <a class="tab nav-item" href="#settings" data-view="settings">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.3 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.3-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5-2.1-1.6ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+        <span>설정</span>
+      </a>
+    </nav>
   </div>
 
-  <!-- 상담원 드로어 -->
-  <div id="drawer-backdrop" class="backdrop" hidden></div>
-  <aside id="drawer" class="drawer" aria-hidden="true" role="dialog" aria-labelledby="drawer-title">
-    <div class="drawer-head">
-      <h2 id="drawer-title"></h2>
-      <button id="drawer-close" class="btn ghost" aria-label="닫기">✕</button>
+  <!-- 상담원 상세(모바일: 아래에서 올라오는 시트, PC: 오른쪽 패널) -->
+  <div id="sheet-backdrop" class="backdrop" hidden></div>
+  <aside id="sheet" class="sheet" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-grabber" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <span id="sheet-avatar" class="avatar avatar-lg"></span>
+      <div class="sheet-title-wrap">
+        <h2 id="sheet-title"></h2>
+        <p id="sheet-sub" class="caption"></p>
+      </div>
+      <button id="sheet-close" class="icon-btn" aria-label="닫기">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
     </div>
-    <div class="drawer-body">
-      <section>
+    <div class="sheet-body">
+      <div id="sheet-stats" class="stat-row"></div>
+      <section class="sheet-sec">
         <h3>처리건수 추이</h3>
-        <div class="chart-box small"><canvas id="drawer-chart"></canvas></div>
+        <div class="chart-box chart-sm"><canvas id="sheet-chart"></canvas></div>
       </section>
-      <section>
+      <section class="sheet-sec">
         <h3>최근 통화</h3>
-        <div class="table-scroll"><table id="recent" class="table compact"></table></div>
+        <ul id="recent" class="list"></ul>
       </section>
-      <section id="admin-section" hidden>
-        <h3>동기화 폴더</h3>
-        <div id="sync-status" class="sync-status"></div>
-        <button id="backup-btn" class="btn danger">백업 후 동기화 폴더 비우기</button>
-        <p id="backup-msg" class="small" role="status"></p>
-        <h3>백업 이력</h3>
-        <div class="table-scroll"><table id="backups" class="table compact"></table></div>
+      <section class="sheet-sec" id="admin-section" hidden>
+        <h3>녹취 폴더</h3>
+        <div id="sync-status" class="folder-box"></div>
+        <p id="backup-msg" class="form-msg" role="status"></p>
+        <button id="backup-btn" class="btn btn-danger btn-lg btn-block">백업하고 폴더 비우기</button>
+        <h3>백업 기록</h3>
+        <ul id="backups" class="list"></ul>
       </section>
     </div>
   </aside>
+
+  <!-- 확인 창 -->
+  <dialog id="confirm" class="dialog">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn btn-secondary btn-lg">취소</button>
+        <button value="ok" id="confirm-ok" class="btn btn-danger-fill btn-lg">확인</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
   <script src="/static/app.js"></script>

@@ -1,8 +1,9 @@
-/* CTI 통화 대시보드 — 메뉴 1: 대시보드 */
+/* 통화 대시보드 */
 (() => {
   "use strict";
 
   const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
   const el = (tag, attrs = {}, ...children) => {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
@@ -12,73 +13,77 @@
       else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
       else n.setAttribute(k, v === true ? "" : v);
     }
-    for (const c of children.flat()) if (c != null) n.append(c);
+    for (const c of children.flat()) if (c != null && c !== false) n.append(c);
     return n;
   };
 
-  // ---------- 색상 ----------
+  // ---------- 색 ----------
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const isDark = () => {
     const t = document.documentElement.dataset.theme;
-    if (t) return t === "dark";
-    return matchMedia("(prefers-color-scheme: dark)").matches;
+    return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   };
-  // 범주형 슬롯(고정 순서). 색은 상담원 ID 순서에 고정 — 필터로 다시 칠하지 않는다.
+  // 상담원 비교 선 색 — 상담원 ID 순서에 고정(필터로 다시 칠하지 않음). 색약 검증된 순서.
   const CAT = {
     light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"],
     dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
   };
-  // 브랜드 블루 순차 램프
-  const BLUE = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5",
-    "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"];
-  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-
-  let agentOrder = []; // 상담원 ID 정렬 목록 → 색 슬롯
+  let agentOrder = [];
   const agentColor = (id) => {
     const i = agentOrder.indexOf(id);
     const pal = CAT[isDark() ? "dark" : "light"];
-    return i >= 0 && i < pal.length ? pal[i] : css("--muted");
+    return i >= 0 && i < pal.length ? pal[i] : css("--text-3");
   };
-
-  /** 히트맵 셀 색: 0 은 비움, 그 외 값/최대값 비율로 램프 단계 선택. */
+  // 히트맵: 토스 블루 단계(적음 → 많음)
+  const HEAT = {
+    light: ["#e8f3ff", "#c9e2ff", "#90c2ff", "#64a8ff", "#4593fc", "#3182f6", "#2272eb", "#1b64da", "#1957c2"],
+    dark: ["#1a2a44", "#1d3a66", "#21508f", "#2563bb", "#2b74db", "#3182f6", "#4593fc", "#64a8ff", "#90c2ff"],
+  };
   const heatColor = (v, max) => {
     if (!v || !max) return null;
-    const t = v / max;
-    // 라이트: 밝은→진한, 다크: 표면에 가까운 진한 단계→밝은 단계
-    const ramp = isDark() ? BLUE.slice(3).reverse() : BLUE;
-    const idx = Math.min(ramp.length - 1, Math.floor(t * (ramp.length - 1) + 0.0001));
-    const whiteText = isDark() ? idx < ramp.length - 4 : idx >= 7;
-    return { bg: ramp[idx], text: whiteText ? "on-dark" : "on-light" };
+    const ramp = HEAT[isDark() ? "dark" : "light"];
+    const idx = Math.min(ramp.length - 1, Math.floor((v / max) * (ramp.length - 1) + 1e-4));
+    const white = isDark() ? idx < 7 : idx >= 3;
+    return { bg: ramp[idx], text: white ? "on-dark" : "on-light" };
   };
 
-  // ---------- 포맷 ----------
+  // ---------- 숫자·시간 표기 ----------
   const nf = new Intl.NumberFormat("ko-KR");
   const fmtInt = (n) => (n == null ? "–" : nf.format(n));
+  /** 사람이 읽는 시간: 45초 / 2분 54초 / 71시간 40분 */
   const fmtDur = (sec) => {
     if (sec == null) return "–";
     sec = Math.round(sec);
+    if (sec < 60) return `${sec}초`;
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-    const pad = (x) => String(x).padStart(2, "0");
-    return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+    if (h) return `${nf.format(h)}시간 ${m}분`;
+    return s ? `${m}분 ${s}초` : `${m}분`;
   };
-  const fmtDurLong = (sec) => {
+  /** 좁은 자리용: 2:54 / 1:02:03 */
+  const fmtClock = (sec) => {
     if (sec == null) return "–";
     sec = Math.round(sec);
-    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-    return h ? `${nf.format(h)}시간 ${m}분` : `${m}분 ${sec % 60}초`;
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    const p = (x) => String(x).padStart(2, "0");
+    return h ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`;
   };
-  const fmtPct = (r, digits = 1) => (r == null ? "–" : `${(r * 100).toFixed(digits)}%`);
+  const fmtPct = (r) => (r == null ? "–" : `${(r * 100).toFixed(1)}%`);
   const fmtBytes = (b) => {
-    if (b < 1024) return `${b} B`;
-    const u = ["KB", "MB", "GB", "TB"]; let i = -1;
-    do { b /= 1024; i++; } while (b >= 1024 && i < u.length - 1);
-    return `${b.toFixed(1)} ${u[i]}`;
+    if (!b) return "0B";
+    const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+    while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+    return `${i ? b.toFixed(1) : b}${u[i]}`;
   };
   const DOW = ["일", "월", "화", "수", "목", "금", "토"];
-  const shortDate = (iso) => {
-    const d = new Date(iso + "T00:00:00");
-    return `${d.getMonth() + 1}/${d.getDate()}(${DOW[d.getDay()]})`;
+  const toDate = (iso) => new Date(iso.length <= 10 ? iso + "T00:00:00" : iso.replace(" ", "T"));
+  const md = (iso) => { const d = toDate(iso); return `${d.getMonth() + 1}.${d.getDate()}`; };
+  const dow = (iso) => DOW[toDate(iso).getDay()];
+  const isWeekend = (iso) => [0, 6].includes(toDate(iso).getDay());
+  const dateTimeKo = (iso) => {
+    const d = toDate(iso);
+    const p = (x) => String(x).padStart(2, "0");
+    return `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]}) ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
-  const isWeekend = (iso) => [0, 6].includes(new Date(iso + "T00:00:00").getDay());
 
   // ---------- API ----------
   async function api(path, opts = {}) {
@@ -88,27 +93,30 @@
       ...opts,
     });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401 && path !== "/api/login") { showLogin(); throw new Error(data.error || "로그인이 필요합니다."); }
-    if (!res.ok) throw new Error(data.error || `요청 실패 (${res.status})`);
+    if (res.status === 401 && path !== "/api/login") { showLogin(); throw new Error(data.error || "로그인이 필요해요."); }
+    if (!res.ok) throw new Error(data.error || `요청에 실패했어요 (${res.status})`);
     return data;
   }
-
   const toast = (msg) => {
     const t = $("#toast"); t.textContent = msg; t.hidden = false;
-    clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), 3000);
+    clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), 2600);
   };
+  /** 토스식 확인 창. 지원 안 되는 브라우저는 기본 confirm. */
+  function ask(title, body, okLabel) {
+    const d = $("#confirm");
+    if (typeof d.showModal !== "function") return Promise.resolve(confirm(`${title}\n\n${body}`));
+    $("#confirm-title").textContent = title;
+    $("#confirm-body").textContent = body;
+    $("#confirm-ok").textContent = okLabel;
+    d.returnValue = "";
+    d.showModal();
+    return new Promise((resolve) => d.addEventListener("close", () => resolve(d.returnValue === "ok"), { once: true }));
+  }
 
   // ---------- 상태 ----------
   const state = {
-    user: null,
-    preset: "today",
-    start: null,
-    end: null,
-    agentId: "",
-    data: null,
-    hiddenSeries: new Set(), // 숨긴 추이 선 (agent id 또는 "total")
-    sort: { key: "handled", dir: "desc" },
-    drawerAgent: null,
+    user: null, preset: "today", start: null, end: null, agentId: "",
+    data: null, shownAgents: new Set(), rankKey: "handled", sheetAgent: null,
   };
   try {
     const saved = JSON.parse(localStorage.getItem("cti.filters") || "{}");
@@ -119,32 +127,52 @@
       localStorage.setItem("cti.filters", JSON.stringify({ preset: state.preset, start: state.start, end: state.end, agentId: state.agentId }));
     } catch { /* 무시 */ }
   };
-
   const periodQuery = () => {
     const p = new URLSearchParams({ preset: state.preset });
     if (state.preset === "custom") { p.set("start", state.start); p.set("end", state.end); }
     return p;
+  };
+  const PERIOD = {
+    today: { now: "오늘", prev: "어제" },
+    yesterday: { now: "어제", prev: "그저께" },
+    this_week: { now: "이번 주", prev: "지난주" },
+    this_month: { now: "이번 달", prev: "지난달" },
+    custom: { now: "선택한 기간", prev: "이전 기간" },
   };
 
   // ---------- 로그인 ----------
   function showLogin() {
     $("#app-view").hidden = true;
     $("#login-view").hidden = false;
-    closeDrawer();
+    closeSheet();
+    setTimeout(() => $("#login-form [name=username]").focus(), 0);
   }
   $("#login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const f = new FormData(e.target);
-    $("#login-error").textContent = "";
+    const f = Object.fromEntries(new FormData(e.target));
+    const err = $("#login-error");
+    err.textContent = "";
+    if (!f.username || !f.password) { err.textContent = "아이디와 비밀번호를 모두 입력해 주세요."; return; }
+    const btn = e.target.querySelector("button[type=submit]");
+    btn.disabled = true;
     try {
-      state.user = await api("/api/login", { method: "POST", body: JSON.stringify(Object.fromEntries(f)) });
+      state.user = await api("/api/login", { method: "POST", body: JSON.stringify(f) });
       e.target.reset();
       await startApp();
-    } catch (err) {
-      $("#login-error").textContent = err.message;
+    } catch (ex) {
+      err.textContent = ex.message;
+    } finally {
+      btn.disabled = false;
     }
   });
+
+  // 사용자 메뉴
+  const userMenu = $("#user-menu"), userBtn = $("#user-btn");
+  const setMenu = (open) => { userMenu.hidden = !open; userBtn.setAttribute("aria-expanded", String(open)); };
+  userBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenu(userMenu.hidden); });
+  document.addEventListener("click", (e) => { if (!userMenu.contains(e.target)) setMenu(false); });
   $("#logout").addEventListener("click", async () => {
+    setMenu(false);
     await api("/api/logout", { method: "POST", body: "{}" }).catch(() => {});
     state.user = null; showLogin();
   });
@@ -152,12 +180,15 @@
   async function startApp() {
     $("#login-view").hidden = true;
     $("#app-view").hidden = false;
-    $("#user-label").textContent = `${state.user.username} (${state.user.role === "admin" ? "관리자" : "조회"})`;
-    $("#demo-badge").hidden = !state.user.demo;
+    const u = state.user;
+    $("#user-initial").textContent = (u.username || "?").slice(0, 1).toUpperCase();
+    $("#user-name").textContent = u.username;
+    $("#user-role").textContent = u.role === "admin" ? "관리자" : "조회 전용";
+    $("#demo-badge").hidden = !u.demo;
     const agents = await api("/api/agents");
     agentOrder = agents.map((a) => a.id).sort((a, b) => a - b);
     const sel = $("#agent-filter");
-    sel.replaceChildren(el("option", { value: "" }, "전체"),
+    sel.replaceChildren(el("option", { value: "" }, "상담원 전체"),
       ...agents.map((a) => el("option", { value: a.id }, a.name)));
     if (!agents.some((a) => String(a.id) === String(state.agentId))) state.agentId = "";
     sel.value = state.agentId;
@@ -166,27 +197,452 @@
     await route();
   }
 
-  // ---------- 메뉴(해시 라우팅) ----------
+  // ---------- 메뉴 ----------
   const VIEWS = ["dashboard", "settings"];
   let dashboardStale = true;
   async function route() {
     if (!state.user) return;
     const view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard";
-    document.querySelectorAll(".menu-item").forEach((a) => {
+    $$(".nav-item").forEach((a) => {
       const on = a.dataset.view === view;
       a.classList.toggle("active", on);
       if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
     $("#dashboard-view").hidden = view !== "dashboard";
     $("#settings-view").hidden = view !== "settings";
+    window.scrollTo(0, 0);
     if (view === "dashboard") {
       if (dashboardStale) { dashboardStale = false; await load(); }
     } else {
-      closeDrawer();
+      closeSheet();
       await loadSettings();
     }
   }
   window.addEventListener("hashchange", route);
+
+  // ---------- 필터 ----------
+  const todayIso = () => {
+    const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  };
+  function syncFilterUI() {
+    $$(".chip[data-preset]").forEach((b) => {
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", String(b.dataset.preset === state.preset));
+    });
+    $("#custom-range").hidden = state.preset !== "custom";
+    $("#start-date").value = state.start || todayIso();
+    $("#end-date").value = state.end || todayIso();
+    const sel = $("#agent-filter");
+    $("#agent-chip-label").textContent = sel.selectedOptions[0]?.textContent || "상담원 전체";
+    sel.closest(".chip-select").classList.toggle("on", !!state.agentId);
+  }
+  $$(".chip[data-preset]").forEach((b) => b.addEventListener("click", () => {
+    state.preset = b.dataset.preset;
+    if (state.preset === "custom") {
+      state.start = state.start || todayIso(); state.end = state.end || todayIso();
+      syncFilterUI(); return; // 조회 버튼을 눌러야 불러옴
+    }
+    syncFilterUI(); saveFilters(); load();
+  }));
+  $("#apply-range").addEventListener("click", () => {
+    const s = $("#start-date").value, e = $("#end-date").value;
+    if (!s || !e) return toast("시작일과 종료일을 골라 주세요.");
+    [state.start, state.end] = s <= e ? [s, e] : [e, s];
+    syncFilterUI(); saveFilters(); load();
+  });
+  $("#trend-to-week").addEventListener("click", () => {
+    state.preset = "this_week"; syncFilterUI(); saveFilters(); load();
+  });
+  $("#agent-filter").addEventListener("change", (e) => {
+    state.agentId = e.target.value; syncFilterUI(); saveFilters(); load();
+  });
+
+  // ---------- 불러오기 ----------
+  let loadSeq = 0;
+  async function load() {
+    const seq = ++loadSeq;
+    const q = periodQuery();
+    if (state.agentId) q.set("agent_id", state.agentId);
+    try {
+      const data = await api(`/api/dashboard?${q}`);
+      if (seq !== loadSeq) return;
+      state.data = data;
+      render();
+    } catch (err) {
+      if (state.user) toast(err.message);
+    }
+  }
+  function render() {
+    const d = state.data;
+    renderHero(d);
+    renderTrend(d.daily_trend);
+    renderHourly(d.hourly);
+    renderRank(d.agent_performance);
+    renderMatrix(d.daily_matrix, d.min_call_sec);
+  }
+
+  // ---------- 핵심 지표 ----------
+  /** 증감: 한국식 색(증가 빨강·감소 파랑). kind: "pct"(변화율) | "pp"(비율 지표, %p) */
+  function delta(m, kind = "pct") {
+    if (!m.delta || m.prev == null) return { cls: "flat", text: "비교할 수 없음" };
+    const v = m.delta.abs;
+    if (!v) return { cls: "flat", text: "변화 없음" };
+    const up = v > 0, arrow = up ? "▲" : "▼";
+    if (kind === "pp") return { cls: up ? "up" : "down", text: `${arrow} ${Math.abs(v * 100).toFixed(1)}%p` };
+    if (m.delta.pct == null) return { cls: up ? "up" : "down", text: `${arrow} 새로 생김` };
+    return { cls: up ? "up" : "down", text: `${arrow} ${Math.abs(m.delta.pct).toFixed(1)}%` };
+  }
+
+  function renderHero(d) {
+    const k = d.kpis, p = PERIOD[state.preset] || PERIOD.custom;
+    const agentName = state.agentId ? $("#agent-filter").selectedOptions[0]?.textContent : null;
+    const calls = k.total_calls, dc = delta(calls);
+    const diff = calls.prev == null ? null : calls.value - calls.prev;
+    const diffText = diff == null ? "" : diff === 0 ? "변화 없어요" : `${p.prev}보다 ${fmtInt(Math.abs(diff))}건 ${diff > 0 ? "많아요" : "적어요"}`;
+
+    const top = [...d.agent_performance].sort((a, b) => b.handled - a.handled)[0];
+    const insight = calls.value === 0
+      ? "아직 통화 기록이 없어요."
+      : !state.agentId && top && top.handled
+        ? [`가장 많이 처리한 상담원은 `, el("b", {}, `${top.name}님`), `이에요 · ${fmtInt(top.handled)}건`]
+        : [`처리 건수는 `, el("b", {}, `${fmtInt(d.agent_performance.reduce((s, r) => s + r.handled, 0))}건`), `이에요 (${d.min_call_sec}초 이상 통화)`];
+
+    const minis = [
+      { label: "총 통화시간", m: k.total_sec, fmt: fmtDur },
+      { label: "평균 통화시간", m: k.att_sec, fmt: fmtDur, title: `${d.min_call_sec}초 이상 통화의 평균(ATT)` },
+      { label: "고객 수", m: k.customers, fmt: (v) => `${fmtInt(v)}명`, title: "같은 번호는 한 번만 셉니다" },
+      { label: `짧은 통화 (${d.min_call_sec}초 미만)`, m: k.short_ratio, fmt: fmtPct, kind: "pp" },
+    ];
+
+    $("#hero").replaceChildren(
+      el("div", { class: "hero-label" }, `${agentName ? agentName + "님의 " : ""}${p.now} 통화`),
+      el("div", { class: "hero-value" }, fmtInt(calls.value), el("small", {}, "건")),
+      el("div", { class: "delta-line" },
+        el("span", { class: `delta ${dc.cls}` }, dc.text),
+        diffText ? el("span", { class: "delta-text" }, diffText) : null),
+      el("div", { class: "mini-grid" }, minis.map((x) => {
+        const dd = delta(x.m, x.kind);
+        return el("div", { class: "mini", title: x.title || null },
+          el("div", { class: "k" }, x.label),
+          el("div", { class: "v" }, x.fmt(x.m.value)),
+          el("div", { class: `d ${dd.cls}` }, dd.cls === "flat" ? dd.text : `${p.prev}보다 ${dd.text}`));
+      })),
+      el("p", { class: "hero-insight" }, insight));
+  }
+
+  // ---------- 차트 공통 ----------
+  const charts = {};
+  const FONT = '"Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif';
+  if (window.Chart) {
+    Chart.defaults.font.family = FONT;
+    Chart.defaults.font.size = 12;
+  }
+  if (document.fonts) document.fonts.ready.then(() => { if (state.data && !$("#dashboard-view").hidden) render(); });
+
+  function baseOptions() {
+    const t3 = css("--text-3");
+    return {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      layout: { padding: { top: 4 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: isDark() ? "#3a3a44" : "#333d4b", titleColor: "#fff", bodyColor: "#fff",
+          padding: 12, cornerRadius: 12, displayColors: false, titleFont: { weight: "600" },
+          bodyFont: { size: 13 }, titleMarginBottom: 4,
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: false }, ticks: { color: t3, maxRotation: 0, autoSkipPadding: 16 } },
+        y: { beginAtZero: true, grid: { color: css("--chart-grid") }, border: { display: false }, ticks: { color: t3, precision: 0, maxTicksLimit: 5, padding: 8 } },
+      },
+    };
+  }
+  const upsert = (id, config) => {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(document.getElementById(id), config);
+  };
+  /** 선 아래 옅은 블루 그라데이션 */
+  const areaFill = (ctx) => {
+    const { chart } = ctx;
+    const area = chart.chartArea;
+    if (!area) return "transparent";
+    const g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+    g.addColorStop(0, isDark() ? "rgba(49,130,246,.35)" : "rgba(49,130,246,.18)");
+    g.addColorStop(1, "rgba(49,130,246,0)");
+    return g;
+  };
+
+  // ---------- 일별 통화량 ----------
+  function renderTrend(t) {
+    const n = t.dates.length, total = t.total.reduce((a, b) => a + b, 0);
+    const single = n === 1;
+    $("#trend-caption").textContent = single
+      ? `${md(t.dates[0])} (${dow(t.dates[0])}) 하루 ${fmtInt(total)}건`
+      : `하루 평균 ${fmtInt(Math.round(total / n))}건 · 상담원을 누르면 비교해요`;
+    $("#trend-box").hidden = single;
+    $("#trend-empty").hidden = !single;
+    if (single) {
+      $("#trend-legend").hidden = true;
+      if (charts["trend-chart"]) { charts["trend-chart"].destroy(); delete charts["trend-chart"]; }
+      return;
+    }
+
+    const series = t.series.map((s) => ({ ...s, color: agentColor(s.agent_id) }));
+    $("#trend-legend").hidden = series.length < 2;
+    $("#trend-legend").replaceChildren(...series.map((s) => el("button", {
+      class: "chip", style: `--c:${s.color}`,
+      "aria-pressed": String(state.shownAgents.has(s.agent_id)),
+      onclick: () => {
+        state.shownAgents.has(s.agent_id) ? state.shownAgents.delete(s.agent_id) : state.shownAgents.add(s.agent_id);
+        renderTrend(t);
+      },
+    }, el("span", { class: "dot" }), s.name)));
+
+    const blue = css("--blue");
+    const opts = baseOptions();
+    opts.interaction = { mode: "index", intersect: false };
+    opts.plugins.tooltip.displayColors = true;
+    opts.plugins.tooltip.boxPadding = 4;
+    opts.plugins.tooltip.callbacks = {
+      title: (items) => { const iso = t.dates[items[0].dataIndex]; return `${md(iso)} (${dow(iso)})`; },
+      label: (item) => ` ${item.dataset.label} ${fmtInt(item.raw)}건`,
+    };
+    const datasets = [{
+      label: state.agentId ? "통화" : "전체", data: t.total, borderColor: blue, backgroundColor: areaFill, fill: true,
+      borderWidth: 2.5, pointRadius: 0, pointBackgroundColor: blue, pointHoverRadius: 5,
+      pointHoverBackgroundColor: blue, pointHoverBorderColor: css("--card"), pointHoverBorderWidth: 2,
+      cubicInterpolationMode: "monotone", order: 2,
+    }];
+    for (const s of series) {
+      if (!state.shownAgents.has(s.agent_id)) continue;
+      datasets.push({
+        label: s.name, data: s.counts, borderColor: s.color, backgroundColor: s.color, fill: false,
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, cubicInterpolationMode: "monotone", order: 1,
+      });
+    }
+    upsert("trend-chart", { type: "line", data: { labels: t.dates.map(md), datasets }, options: opts });
+  }
+
+  // ---------- 시간대별 ----------
+  function renderHourly(h) {
+    const max = Math.max(...h);
+    const peak = h.indexOf(max);
+    $("#hourly-caption").textContent = max ? `가장 바쁜 시간은 ${peak}시예요 · ${fmtInt(max)}건` : "통화 기록이 없어요";
+    const opts = baseOptions();
+    opts.scales.x.ticks.callback = (v, i) => (i % 3 === 0 ? `${i}시` : "");
+    opts.scales.x.ticks.autoSkip = false;
+    opts.plugins.tooltip.callbacks = {
+      title: (items) => `${items[0].dataIndex}시 ~ ${items[0].dataIndex + 1}시`,
+      label: (item) => `${fmtInt(item.raw)}건`,
+    };
+    const blue = css("--blue"), soft = isDark() ? "#2b4a75" : "#c9e2ff";
+    upsert("hourly-chart", {
+      type: "bar",
+      data: {
+        labels: h.map((_, i) => `${i}시`),
+        datasets: [{
+          data: h, backgroundColor: h.map((v) => (v === max && max ? blue : soft)),
+          hoverBackgroundColor: blue, borderRadius: 6, borderSkipped: false,
+          categoryPercentage: 0.9, barPercentage: 0.85, minBarLength: 0,
+        }],
+      },
+      options: opts,
+    });
+  }
+
+  // ---------- 상담원 순위 ----------
+  const RANK = [
+    { key: "handled", label: "처리건수", fmt: (v) => `${fmtInt(v)}건` },
+    { key: "total_sec", label: "통화시간", fmt: fmtDur },
+    { key: "att_sec", label: "평균", fmt: fmtDur },
+    { key: "longest_sec", label: "최장", fmt: fmtDur },
+  ];
+  function renderRank(rows) {
+    const cur = RANK.find((r) => r.key === state.rankKey) || RANK[0];
+    $("#rank-sort").replaceChildren(...RANK.map((r) => el("button", {
+      role: "tab", "aria-selected": String(r.key === cur.key),
+      onclick: () => { state.rankKey = r.key; renderRank(rows); },
+    }, r.label)));
+    const sorted = [...rows].sort((a, b) => (b[cur.key] ?? -1) - (a[cur.key] ?? -1) || a.name.localeCompare(b.name, "ko"));
+    const max = Math.max(1, ...sorted.map((r) => r[cur.key] || 0));
+    $("#rank-list").replaceChildren(...(sorted.length ? sorted.map((r, i) => el("li", {},
+      el("button", { class: "rank-row", onclick: () => openSheet(r.agent_id) },
+        el("span", { class: `rank-no${i < 3 && r[cur.key] ? " top" : ""}` }, String(i + 1)),
+        el("span", { class: "avatar" }, r.name.slice(0, 1)),
+        el("span", { class: "rank-main" },
+          el("div", { class: "rank-name" }, r.name),
+          el("div", { class: "rank-sub" },
+            `처리 ${fmtInt(r.handled)}건 · 평균 ${fmtClock(r.att_sec)} · 최장 ${fmtClock(r.longest_sec)}`),
+          el("div", { class: "rank-bar" }, el("i", { style: `width:${((r[cur.key] || 0) / max) * 100}%` }))),
+        el("span", { class: "rank-val" }, cur.fmt(r[cur.key]))))) : [el("li", { class: "empty" }, "상담원이 없어요")]));
+  }
+
+  // ---------- 일별 처리건수(히트맵) ----------
+  function renderMatrix(m, minSec) {
+    $("#matrix-caption").textContent = `${minSec}초 이상 통화만 셌어요 · 진할수록 많아요`;
+    const thead = el("thead", {}, el("tr", {},
+      el("th", { class: "name" }, ""),
+      m.dates.map((d) => el("th", { class: isWeekend(d) ? "weekend" : null, title: d }, md(d), el("span", { class: "dow" }, dow(d)))),
+      el("th", {}, "합계")));
+    const tbody = el("tbody", {}, m.rows.map((r) => el("tr", {},
+      el("td", { class: "name" }, el("button", { onclick: () => openSheet(r.agent_id) }, r.name)),
+      r.counts.map((v, i) => {
+        const c = heatColor(v, m.max_cell);
+        return el("td", {
+          class: `cell${c ? " " + c.text : ""}`, style: c ? `background:${c.bg}` : null,
+          title: `${r.name} · ${m.dates[i]} · ${v}건`,
+        }, v ? fmtInt(v) : "–");
+      }),
+      el("td", { class: "tot" }, fmtInt(r.total)))));
+    const tfoot = el("tfoot", {}, el("tr", {},
+      el("td", { class: "name" }, "합계"),
+      m.col_totals.map((v) => el("td", {}, fmtInt(v))),
+      el("td", { class: "tot" }, fmtInt(m.grand_total))));
+    $("#matrix").replaceChildren(thead, tbody, tfoot);
+  }
+
+  // ---------- 상담원 상세 시트 ----------
+  async function openSheet(agentId) {
+    state.sheetAgent = agentId;
+    const sheet = $("#sheet");
+    const row = state.data?.agent_performance.find((r) => r.agent_id === agentId);
+    $("#sheet-title").textContent = row ? `${row.name}님` : "불러오는 중…";
+    $("#sheet-avatar").textContent = row ? row.name.slice(0, 1) : "";
+    $("#sheet-sub").textContent = "";
+    $("#backup-msg").textContent = "";
+    sheet.classList.add("open");
+    sheet.setAttribute("aria-hidden", "false");
+    $("#sheet-backdrop").hidden = false;
+    document.body.style.overflow = "hidden";
+    try {
+      const d = await api(`/api/agents/${agentId}?${periodQuery()}`);
+      if (state.sheetAgent !== agentId) return;
+      renderSheet(d, row);
+      $("#sheet-close").focus();
+    } catch (err) {
+      toast(err.message);
+    }
+  }
+  function closeSheet() {
+    state.sheetAgent = null;
+    $("#sheet").classList.remove("open");
+    $("#sheet").setAttribute("aria-hidden", "true");
+    $("#sheet-backdrop").hidden = true;
+    document.body.style.overflow = "";
+  }
+  $("#sheet-close").addEventListener("click", closeSheet);
+  $("#sheet-backdrop").addEventListener("click", closeSheet);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && state.sheetAgent != null) closeSheet(); });
+  // 모바일: 시트 손잡이를 아래로 끌면 닫기
+  (() => {
+    let y0 = null;
+    const head = $(".sheet-grabber");
+    const sheet = $("#sheet");
+    const start = (e) => { y0 = e.touches[0].clientY; sheet.style.transition = "none"; };
+    const move = (e) => { if (y0 == null) return; const dy = Math.max(0, e.touches[0].clientY - y0); sheet.style.transform = `translateY(${dy}px)`; };
+    const end = (e) => {
+      if (y0 == null) return;
+      const dy = e.changedTouches[0].clientY - y0; y0 = null;
+      sheet.style.transition = ""; sheet.style.transform = "";
+      if (dy > 80) closeSheet();
+    };
+    for (const t of [head, $(".sheet-head")]) {
+      t.addEventListener("touchstart", start, { passive: true });
+      t.addEventListener("touchmove", move, { passive: true });
+      t.addEventListener("touchend", end);
+    }
+  })();
+
+  function renderSheet(d, row) {
+    const a = d.agent, p = PERIOD[state.preset] || PERIOD.custom;
+    $("#sheet-title").textContent = `${a.name}님`;
+    $("#sheet-avatar").textContent = a.name.slice(0, 1);
+    $("#sheet-sub").textContent = [a.extension ? `내선 ${a.extension}` : null, `${p.now} 기준`].filter(Boolean).join(" · ");
+    const handled = d.trend.handled.reduce((s, v) => s + v, 0);
+    $("#sheet-stats").replaceChildren(
+      el("div", { class: "stat" }, el("div", { class: "k" }, "처리건수"), el("div", { class: "v" }, `${fmtInt(handled)}건`)),
+      el("div", { class: "stat" }, el("div", { class: "k" }, "평균 통화"), el("div", { class: "v" }, fmtClock(row?.att_sec))),
+      el("div", { class: "stat" }, el("div", { class: "k" }, "총 통화"), el("div", { class: "v" }, fmtClock(row?.total_sec))));
+
+    const opts = baseOptions();
+    opts.interaction = { mode: "index", intersect: false };
+    opts.plugins.tooltip.callbacks = {
+      title: (items) => { const iso = d.trend.dates[items[0].dataIndex]; return `${md(iso)} (${dow(iso)})`; },
+      label: (item) => `처리 ${fmtInt(item.raw)}건 · 평균 ${fmtClock(d.trend.att_sec[item.dataIndex])}`,
+    };
+    const blue = css("--blue"), single = d.trend.dates.length === 1;
+    upsert("sheet-chart", {
+      type: "line",
+      data: {
+        labels: d.trend.dates.map(md),
+        datasets: [{
+          data: d.trend.handled, borderColor: blue, backgroundColor: areaFill, fill: true, borderWidth: 2.5,
+          pointRadius: single ? 5 : 0, pointBackgroundColor: blue, pointHoverRadius: 5, cubicInterpolationMode: "monotone",
+        }],
+      },
+      options: opts,
+    });
+
+    const minSec = state.data?.min_call_sec ?? 0;
+    $("#recent").replaceChildren(...(d.recent_calls.length ? d.recent_calls.map((c) => el("li", {},
+      el("div", { class: "main" },
+        el("div", { class: "t" }, dateTimeKo(c.started_at)),
+        el("div", { class: "s" }, c.customer_masked || "번호 없음")),
+      el("div", { class: `r${c.duration_sec < minSec ? " short" : ""}`, title: c.duration_sec < minSec ? "짧은 통화" : null },
+        fmtDur(c.duration_sec)))) : [el("li", { class: "empty" }, "통화 기록이 없어요")]));
+
+    const isAdmin = state.user.role === "admin" && d.sync_folder;
+    $("#admin-section").hidden = !isAdmin;
+    if (isAdmin) renderAdmin(a, d.sync_folder, d.backups);
+  }
+
+  function renderAdmin(agent, folder, backups) {
+    const box = $("#sync-status");
+    if (folder.error) {
+      box.replaceChildren(el("div", { class: "k" }, "폴더 설정을 확인해 주세요"), el("div", { class: "path" }, folder.error));
+    } else {
+      box.replaceChildren(
+        el("div", { class: "k" }, "아직 백업하지 않은 녹취"),
+        el("div", { class: "big" }, folder.exists ? `${fmtInt(folder.file_count)}개 · ${fmtBytes(folder.total_bytes)}` : "폴더 없음"),
+        el("div", { class: "path" }, folder.path));
+    }
+    const btn = $("#backup-btn");
+    btn.disabled = !!folder.error || !folder.file_count;
+    btn.onclick = () => runBackup(agent, folder);
+    $("#backups").replaceChildren(...(backups.length ? backups.map((b) => el("li", {},
+      el("div", { class: "main" },
+        el("div", { class: "t" }, dateTimeKo(b.created_at)),
+        el("div", { class: "s" }, `${b.performed_by} · ${b.archive_path.split(/[\\/]/).pop()}`)),
+      el("div", { class: "r" }, `${fmtInt(b.file_count)}개 · ${fmtBytes(b.total_bytes)}`))) : [el("li", { class: "empty" }, "백업 기록이 없어요")]));
+  }
+
+  async function runBackup(agent, folder) {
+    const ok = await ask(`녹취 ${fmtInt(folder.file_count)}개를 백업하고 비울까요?`,
+      `${agent.name}님 폴더의 파일을 압축해서 보관한 뒤 폴더에서 지워요. 통화 기록은 먼저 저장돼요.`, "비우기");
+    if (!ok) return;
+    const btn = $("#backup-btn"), msg = $("#backup-msg");
+    btn.disabled = true;
+    msg.className = "form-msg"; msg.textContent = "백업하는 중이에요…";
+    try {
+      const r = await api(`/api/agents/${agent.id}/backup`, { method: "POST", body: "{}" });
+      const b = r.backup;
+      const notes = b.delete_failed
+        ? [`${fmtInt(b.file_count)}개를 백업했지만 ${fmtInt(b.delete_failed)}개는 지우지 못했어요. 폴더 삭제 권한을 확인해 주세요. 백업 파일은 안전해요.`]
+        : [`${fmtInt(b.file_count)}개(${fmtBytes(b.total_bytes)})를 백업하고 폴더를 비웠어요.`];
+      if (b.ingested) notes.push(`새 통화 ${fmtInt(b.ingested)}건을 먼저 기록했어요.`);
+      if (b.left_recent) notes.push(`올라오는 중인 파일 ${fmtInt(b.left_recent)}개는 남겨 뒀어요.`);
+      if (b.unparsed) notes.push(`이름을 읽지 못한 ${fmtInt(b.unparsed)}개는 백업만 했어요.`);
+      msg.className = `form-msg ${b.delete_failed ? "err" : "ok"}`;
+      msg.textContent = notes.join(" ");
+      if (b.ingested) load();
+      if (state.sheetAgent === agent.id) renderAdmin(agent, r.sync_folder, r.backups);
+    } catch (err) {
+      msg.className = "form-msg err"; msg.textContent = err.message;
+      btn.disabled = false;
+    }
+  }
 
   // ---------- 설정 ----------
   const SETTING_FIELDS = [
@@ -199,8 +655,7 @@
   }
   async function loadSettings() {
     const isAdmin = state.user.role === "admin";
-    const msg = $("#settings-msg");
-    msg.textContent = ""; msg.className = "small";
+    $("#settings-msg").textContent = "";
     $("#ingest-msg").textContent = "";
     for (const f of SETTING_FIELDS) $(f.input).disabled = !isAdmin;
     $("#settings-save").hidden = !isAdmin;
@@ -209,7 +664,7 @@
     try {
       fillSettings(await api("/api/settings"));
     } catch (err) {
-      msg.className = "small err"; msg.textContent = err.message;
+      const msg = $("#settings-msg"); msg.className = "form-msg err"; msg.textContent = err.message;
     }
   }
   $("#settings-form").addEventListener("submit", async (e) => {
@@ -217,9 +672,9 @@
     const msg = $("#settings-msg"), btn = $("#settings-save");
     const body = {};
     for (const f of SETTING_FIELDS) {
-      const v = Number($(f.input).value);
-      if ($(f.input).value === "" || !Number.isInteger(v) || v < f.min || v > f.max) {
-        msg.className = "small err"; msg.textContent = `${f.label}: ${f.min}~${f.max} 사이의 정수를 입력하세요.`; return;
+      const raw = $(f.input).value, v = Number(raw);
+      if (raw === "" || !Number.isInteger(v) || v < f.min || v > f.max) {
+        msg.className = "form-msg err"; msg.textContent = `${f.label}: ${f.min}~${f.max} 사이 숫자로 입력해 주세요.`; return;
       }
       body[f.key] = v;
     }
@@ -227,10 +682,10 @@
     try {
       const s = await api("/api/settings", { method: "POST", body: JSON.stringify(body) });
       fillSettings(s);
-      msg.className = "small ok"; msg.textContent = `저장했습니다. 이제 ${s.min_call_sec}초 이상 통화를 처리 건수로 셉니다.`;
+      msg.className = "form-msg ok"; msg.textContent = `저장했어요. 이제 ${s.min_call_sec}초 이상 통화를 처리 건수로 셉니다.`;
       dashboardStale = true;
     } catch (err) {
-      msg.className = "small err"; msg.textContent = err.message;
+      msg.className = "form-msg err"; msg.textContent = err.message;
     } finally {
       btn.disabled = false;
     }
@@ -238,410 +693,35 @@
 
   function renderIngestStatus(r) {
     const box = $("#ingest-status");
-    if (!r) { box.replaceChildren(el("div", {}, "아직 가져온 적이 없습니다.")); return; }
-    const parts = [`새로 추가 ${fmtInt(r.added)}건`, `이미 있음 ${fmtInt(r.already)}건`];
-    if (r.recent) parts.push(`동기화 중이라 다음에 ${fmtInt(r.recent)}개`);
-    if (r.not_audio) parts.push(`녹취 아닌 파일 ${fmtInt(r.not_audio)}개`);
+    if (!r) { box.replaceChildren(el("div", { class: "status-row" }, el("span", { class: "k" }, "아직 가져온 적이 없어요"))); return; }
+    const row = (k, v) => el("div", { class: "status-row" }, el("span", { class: "k" }, k), el("span", { class: "v" }, v));
     box.replaceChildren(...[
-      el("div", {}, `마지막 실행: ${r.at} · 상담원 폴더 ${fmtInt(r.agents)}개`),
-      el("div", {}, parts.join(" · ")),
-      r.failed_count ? el("div", { class: "error" }, `파일 이름을 해석하지 못한 파일 ${fmtInt(r.failed_count)}개 (일시가 없음):`) : null,
-      r.failed_count ? el("ul", { class: "failed-list" }, r.failed.map((f) => el("li", {}, f))) : null,
+      row("마지막으로 가져온 시각", dateTimeKo(r.at)),
+      row("새로 추가", `${fmtInt(r.added)}건`),
+      row("이미 있던 녹취", `${fmtInt(r.already)}건`),
+      row("상담원 폴더", `${fmtInt(r.agents)}개`),
+      r.recent ? row("올라오는 중(다음에 가져옴)", `${fmtInt(r.recent)}개`) : null,
+      r.failed_count ? el("div", { class: "fail-box" },
+        `파일 이름에서 날짜·시간을 못 읽은 파일이 ${fmtInt(r.failed_count)}개 있어요`,
+        el("ul", {}, r.failed.map((f) => el("li", {}, f)))) : null,
     ].filter(Boolean));
   }
   $("#ingest-now").addEventListener("click", async () => {
     const btn = $("#ingest-now"), msg = $("#ingest-msg");
-    btn.disabled = true; msg.className = "small"; msg.textContent = "가져오는 중…";
+    btn.disabled = true; msg.className = "form-msg"; msg.textContent = "가져오는 중이에요…";
     try {
       const s = await api("/api/ingest", { method: "POST", body: "{}" });
       fillSettings(s);
-      msg.className = "small ok"; msg.textContent = `완료: ${fmtInt(s.last_ingest.added)}건 추가`;
+      msg.className = "form-msg ok"; msg.textContent = `${fmtInt(s.last_ingest.added)}건을 새로 가져왔어요.`;
       if (s.last_ingest.added) dashboardStale = true;
     } catch (err) {
-      msg.className = "small err"; msg.textContent = err.message;
+      msg.className = "form-msg err"; msg.textContent = err.message;
     } finally {
       btn.disabled = false;
     }
   });
 
-  // ---------- 필터 ----------
-  const todayIso = () => {
-    const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0, 10);
-  };
-  function syncFilterUI() {
-    document.querySelectorAll(".seg button").forEach((b) => {
-      const on = b.dataset.preset === state.preset;
-      b.classList.toggle("active", on);
-      b.setAttribute("aria-checked", on);
-      b.setAttribute("role", "radio");
-    });
-    $("#custom-range").hidden = state.preset !== "custom";
-    $("#start-date").value = state.start || todayIso();
-    $("#end-date").value = state.end || todayIso();
-  }
-  document.querySelectorAll(".seg button").forEach((b) =>
-    b.addEventListener("click", () => {
-      state.preset = b.dataset.preset;
-      if (state.preset === "custom") {
-        state.start = state.start || todayIso(); state.end = state.end || todayIso();
-        syncFilterUI(); return; // 적용 버튼을 눌러야 조회
-      }
-      syncFilterUI(); saveFilters(); load();
-    }));
-  $("#apply-range").addEventListener("click", () => {
-    const s = $("#start-date").value, e = $("#end-date").value;
-    if (!s || !e) return toast("시작일과 종료일을 선택하세요.");
-    [state.start, state.end] = s <= e ? [s, e] : [e, s];
-    syncFilterUI(); saveFilters(); load();
-  });
-  $("#agent-filter").addEventListener("change", (e) => {
-    state.agentId = e.target.value; saveFilters(); load();
-  });
-
-  // ---------- 로드 ----------
-  let loadSeq = 0;
-  async function load() {
-    const seq = ++loadSeq;
-    const q = periodQuery();
-    if (state.agentId) q.set("agent_id", state.agentId);
-    try {
-      const data = await api(`/api/dashboard?${q}`);
-      if (seq !== loadSeq) return; // 늦게 도착한 이전 응답 무시
-      state.data = data;
-      render();
-    } catch (err) {
-      if (state.user) toast(err.message);
-    }
-  }
-
-  function render() {
-    const d = state.data;
-    const p = d.period, pp = d.prev_period;
-    const rng = (x) => (x.start === x.end ? x.start : `${x.start} ~ ${x.end}`);
-    $("#period-label").textContent = `${rng(p)} · 비교: ${rng(pp)}`;
-    renderKpis(d);
-    renderTrend(d.daily_trend);
-    renderHourly(d.hourly);
-    renderMatrix(d.daily_matrix, d.min_call_sec);
-    renderPerf(d.agent_performance);
-  }
-
-  // ---------- KPI ----------
-  function renderKpis(d) {
-    const k = d.kpis;
-    const min = d.min_call_sec;
-    const cards = [
-      { key: "total_calls", label: "총 통화 건수", fmt: fmtInt, better: "up" },
-      { key: "total_sec", label: "총 통화시간", fmt: fmtDurLong, better: "up" },
-      { key: "att_sec", label: "평균 통화시간 (ATT)", fmt: fmtDur, better: null, hint: `${min}초 이상 통화 기준` },
-      { key: "customers", label: "고객 수", fmt: fmtInt, better: "up", hint: "중복 제외" },
-      { key: "short_ratio", label: "짧은 통화 비율", fmt: fmtPct, better: "down", hint: `${min}초 미만`, pp: true },
-    ];
-    $("#kpis").replaceChildren(...cards.map((c) => {
-      const m = k[c.key];
-      return el("div", { class: "kpi" },
-        el("div", { class: "label" }, c.label),
-        el("div", { class: "value" }, c.fmt(m.value)),
-        el("div", { class: "delta" }, deltaNode(m, c), el("span", { class: "muted" }, `직전 ${c.fmt(m.prev)}`)),
-        c.hint ? el("div", { class: "hint" }, c.hint) : null);
-    }));
-  }
-  function deltaNode(m, c) {
-    if (!m.delta) return el("span", { class: "flat" }, "비교 불가");
-    const v = m.delta.abs;
-    if (v === 0) return el("span", { class: "flat" }, "— 변동 없음");
-    const up = v > 0;
-    const arrow = up ? "▲" : "▼";
-    let cls = "flat";
-    if (c.better) cls = (up === (c.better === "up")) ? (up ? "up-good" : "down-good") : (up ? "up-bad" : "down-bad");
-    let text;
-    if (c.pp) text = `${arrow} ${Math.abs(v * 100).toFixed(1)}%p`;
-    else if (m.delta.pct != null) text = `${arrow} ${Math.abs(m.delta.pct).toFixed(1)}%`;
-    else text = `${arrow} ${c.fmt(Math.abs(v))}`;
-    return el("span", { class: cls, title: up ? "증가" : "감소" }, text);
-  }
-
-  // ---------- 차트 공통 ----------
-  const charts = {};
-  const FONT = '"Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif';
-  if (window.Chart) Chart.defaults.font.family = FONT;
-  // 웹 글꼴이 늦게 도착하면 차트(캔버스)를 다시 그려 글꼴을 맞춘다
-  if (document.fonts) document.fonts.ready.then(() => { if (state.data && !$("#dashboard-view").hidden) render(); });
-
-  function baseOptions() {
-    const grid = css("--grid"), muted = css("--muted"), axis = css("--axis");
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { backgroundColor: css("--ink"), titleColor: css("--surface"), bodyColor: css("--surface"), padding: 10, boxPadding: 4 },
-      },
-      scales: {
-        x: { grid: { display: false }, border: { color: axis }, ticks: { color: muted, font: { size: 11 }, maxRotation: 0, autoSkipPadding: 12 } },
-        y: { beginAtZero: true, grid: { color: grid }, border: { display: false }, ticks: { color: muted, font: { size: 11 }, precision: 0 } },
-      },
-    };
-  }
-  const upsert = (id, config) => {
-    if (charts[id]) charts[id].destroy();
-    charts[id] = new Chart(document.getElementById(id), config);
-  };
-
-  // ---------- 일별 추이 ----------
-  function renderTrend(t) {
-    const ink2 = css("--ink-2");
-    const series = [
-      { id: "total", name: "전체 합계", data: t.total, color: ink2, total: true },
-      ...t.series.map((s) => ({ id: s.agent_id, name: s.name, data: s.counts, color: agentColor(s.agent_id) })),
-    ];
-    // 범례 = 선 토글
-    $("#trend-legend").replaceChildren(...series.map((s) => el("button", {
-      class: s.total ? "total" : null,
-      "aria-pressed": String(!state.hiddenSeries.has(s.id)),
-      style: `--c:${s.color}`,
-      onclick: () => {
-        state.hiddenSeries.has(s.id) ? state.hiddenSeries.delete(s.id) : state.hiddenSeries.add(s.id);
-        renderTrend(t);
-      },
-    }, el("span", { class: "swatch" }), s.name)));
-
-    const opts = baseOptions();
-    opts.interaction = { mode: "index", intersect: false };
-    opts.plugins.tooltip.callbacks = { title: (items) => shortDate(t.dates[items[0].dataIndex]) };
-    const single = t.dates.length === 1;
-    upsert("trend-chart", {
-      type: "line",
-      data: {
-        labels: t.dates.map(shortDate),
-        datasets: series.filter((s) => !state.hiddenSeries.has(s.id)).map((s) => ({
-          label: s.name,
-          data: s.data,
-          borderColor: s.color,
-          backgroundColor: s.color,
-          borderWidth: 2,
-          borderDash: s.total ? [5, 4] : [],
-          pointRadius: single ? 4 : 0,
-          pointHoverRadius: 4,
-          pointHoverBorderColor: css("--surface"),
-          pointHoverBorderWidth: 2,
-          cubicInterpolationMode: "monotone",
-        })),
-      },
-      options: opts,
-    });
-  }
-
-  // ---------- 시간대별 ----------
-  function renderHourly(h) {
-    const opts = baseOptions();
-    opts.plugins.tooltip.callbacks = {
-      title: (items) => `${items[0].dataIndex}시 ~ ${items[0].dataIndex + 1}시`,
-      label: (item) => ` ${fmtInt(item.raw)}건`,
-    };
-    upsert("hourly-chart", {
-      type: "bar",
-      data: {
-        labels: h.map((_, i) => String(i)),
-        datasets: [{
-          label: "통화 건수",
-          data: h,
-          backgroundColor: css("--brand"),
-          borderRadius: { topLeft: 4, topRight: 4 },
-          borderSkipped: "bottom",
-          categoryPercentage: 0.85,
-          barPercentage: 0.9,
-        }],
-      },
-      options: opts,
-    });
-  }
-
-  // ---------- 히트맵 표 ----------
-  function renderMatrix(m, minSec) {
-    $("#matrix-note").textContent = `처리건수 = ${minSec}초 이상 통화 · 진할수록 많음`;
-    const thead = el("thead", {}, el("tr", {},
-      el("th", { scope: "col" }, "상담원"),
-      m.dates.map((d) => el("th", { scope: "col", class: `date${isWeekend(d) ? " weekend" : ""}`, title: d }, shortDate(d))),
-      el("th", { scope: "col", class: "total" }, "합계")));
-    const tbody = el("tbody", {}, m.rows.map((r) => el("tr", {},
-      el("td", {}, agentButton(r.agent_id, r.name)),
-      r.counts.map((v, i) => {
-        const c = heatColor(v, m.max_cell);
-        return el("td", {
-          class: `cell${c ? " " + c.text : ""}`,
-          style: c ? `background:${c.bg}` : null,
-          title: `${r.name} · ${m.dates[i]} · ${v}건`,
-        }, v ? fmtInt(v) : "·");
-      }),
-      el("td", { class: "total" }, fmtInt(r.total)))));
-    const tfoot = el("tfoot", {}, el("tr", {},
-      el("td", {}, "합계"),
-      m.col_totals.map((v) => el("td", {}, fmtInt(v))),
-      el("td", {}, fmtInt(m.grand_total))));
-    $("#matrix").replaceChildren(thead, tbody, tfoot);
-  }
-
-  const agentButton = (id, name) => el("button", { class: "agent-link", onclick: () => openDrawer(id) }, name);
-
-  // ---------- 상담원별 실적 ----------
-  const PERF_COLS = [
-    { key: "name", label: "상담원", fmt: null, type: "str" },
-    { key: "handled", label: "처리건수", fmt: fmtInt },
-    { key: "total_sec", label: "총 통화시간", fmt: fmtDur },
-    { key: "att_sec", label: "ATT", fmt: fmtDur },
-    { key: "longest_sec", label: "최장 통화", fmt: fmtDur },
-  ];
-  function renderPerf(rows) {
-    const { key, dir } = state.sort;
-    const col = PERF_COLS.find((c) => c.key === key);
-    const sorted = [...rows].sort((a, b) => {
-      const x = a[key], y = b[key];
-      if (x == null && y == null) return 0;
-      if (x == null) return 1; // 값 없음은 항상 뒤로
-      if (y == null) return -1;
-      const r = col.type === "str" ? String(x).localeCompare(String(y), "ko") : x - y;
-      return dir === "asc" ? r : -r;
-    });
-    const thead = el("thead", {}, el("tr", {}, PERF_COLS.map((c) => el("th", {
-      scope: "col",
-      tabindex: "0",
-      "aria-sort": c.key === key ? (dir === "asc" ? "ascending" : "descending") : "none",
-      onclick: () => setSort(c.key, rows),
-      onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSort(c.key, rows); } },
-    }, c.label))));
-    const tbody = el("tbody", {}, sorted.map((r) => el("tr", {},
-      PERF_COLS.map((c) => el("td", {}, c.key === "name" ? agentButton(r.agent_id, r.name) : c.fmt(r[c.key]))))));
-    $("#perf").replaceChildren(thead, tbody);
-  }
-  function setSort(key, rows) {
-    const s = state.sort;
-    state.sort = { key, dir: s.key === key ? (s.dir === "asc" ? "desc" : "asc") : (key === "name" ? "asc" : "desc") };
-    renderPerf(rows);
-  }
-
-  // ---------- 드로어 ----------
-  async function openDrawer(agentId) {
-    state.drawerAgent = agentId;
-    const drawer = $("#drawer");
-    drawer.classList.add("open");
-    drawer.setAttribute("aria-hidden", "false");
-    $("#drawer-backdrop").hidden = false;
-    $("#drawer-title").textContent = "불러오는 중…";
-    $("#backup-msg").textContent = "";
-    $("#backup-msg").className = "small";
-    try {
-      const d = await api(`/api/agents/${agentId}?${periodQuery()}`);
-      if (state.drawerAgent !== agentId) return;
-      renderDrawer(d);
-      $("#drawer-close").focus();
-    } catch (err) {
-      $("#drawer-title").textContent = "오류";
-      toast(err.message);
-    }
-  }
-  function closeDrawer() {
-    state.drawerAgent = null;
-    $("#drawer").classList.remove("open");
-    $("#drawer").setAttribute("aria-hidden", "true");
-    $("#drawer-backdrop").hidden = true;
-  }
-  $("#drawer-close").addEventListener("click", closeDrawer);
-  $("#drawer-backdrop").addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && state.drawerAgent != null) closeDrawer(); });
-
-  function renderDrawer(d) {
-    const a = d.agent;
-    $("#drawer-title").textContent = a.extension ? `${a.name} (내선 ${a.extension})` : a.name;
-
-    const opts = baseOptions();
-    opts.interaction = { mode: "index", intersect: false };
-    opts.plugins.tooltip.callbacks = {
-      title: (items) => shortDate(d.trend.dates[items[0].dataIndex]),
-      label: (item) => ` 처리 ${fmtInt(item.raw)}건 · ATT ${fmtDur(d.trend.att_sec[item.dataIndex])}`,
-    };
-    const color = agentColor(a.id);
-    upsert("drawer-chart", {
-      type: "line",
-      data: {
-        labels: d.trend.dates.map(shortDate),
-        datasets: [{
-          label: "처리건수", data: d.trend.handled, borderColor: color, backgroundColor: color,
-          borderWidth: 2, pointRadius: d.trend.dates.length === 1 ? 4 : 0, pointHoverRadius: 4, cubicInterpolationMode: "monotone",
-        }],
-      },
-      options: opts,
-    });
-
-    $("#recent").replaceChildren(
-      el("thead", {}, el("tr", {}, ["일시", "고객번호", "통화시간"].map((h) => el("th", { scope: "col" }, h)))),
-      el("tbody", {}, d.recent_calls.length
-        ? d.recent_calls.map((c) => el("tr", {},
-          el("td", {}, c.started_at.slice(0, 16)),
-          el("td", {}, c.customer_masked || "–"),
-          el("td", {}, fmtDur(c.duration_sec))))
-        : el("tr", {}, el("td", { colspan: "3", class: "muted" }, "통화 기록이 없습니다."))));
-
-    const isAdmin = state.user.role === "admin" && d.sync_folder;
-    $("#admin-section").hidden = !isAdmin;
-    if (isAdmin) renderAdmin(a, d.sync_folder, d.backups);
-  }
-
-  function renderAdmin(agent, folder, backups) {
-    const st = $("#sync-status");
-    if (folder.error) {
-      st.replaceChildren(el("span", { class: "error" }, folder.error));
-    } else {
-      st.replaceChildren(
-        el("div", {}, "경로: ", el("code", {}, folder.path)),
-        el("div", {}, folder.exists
-          ? `파일 ${fmtInt(folder.file_count)}개 · ${fmtBytes(folder.total_bytes)}`
-          : "폴더가 아직 없습니다."));
-    }
-    const btn = $("#backup-btn");
-    btn.disabled = !!folder.error || !folder.file_count;
-    btn.onclick = () => runBackup(agent, folder);
-
-    $("#backups").replaceChildren(
-      el("thead", {}, el("tr", {}, ["일시", "파일 수", "용량", "실행자", "백업 파일"].map((h) => el("th", { scope: "col" }, h)))),
-      el("tbody", {}, backups.length
-        ? backups.map((b) => el("tr", {},
-          el("td", {}, b.created_at.slice(0, 16)),
-          el("td", {}, fmtInt(b.file_count)),
-          el("td", {}, fmtBytes(b.total_bytes)),
-          el("td", {}, b.performed_by),
-          el("td", { title: b.archive_path }, b.archive_path.split(/[\\/]/).pop())))
-        : el("tr", {}, el("td", { colspan: "5", class: "muted" }, "백업 이력이 없습니다."))));
-  }
-
-  async function runBackup(agent, folder) {
-    const ok = confirm(`${agent.name} 상담원의 동기화 폴더 파일 ${folder.file_count}개를 백업한 뒤 폴더를 비웁니다.\n\n${folder.path}\n\n계속할까요?`);
-    if (!ok) return;
-    const btn = $("#backup-btn"), msg = $("#backup-msg");
-    btn.disabled = true;
-    msg.className = "small"; msg.textContent = "백업 중…";
-    try {
-      const r = await api(`/api/agents/${agent.id}/backup`, { method: "POST", body: "{}" });
-      const b = r.backup;
-      msg.className = b.delete_failed ? "small err" : "small ok";
-      const notes = b.delete_failed
-        ? [`${fmtInt(b.file_count)}개 파일을 백업했지만 ${fmtInt(b.delete_failed)}개는 지우지 못했습니다(삭제 권한 확인 필요). 백업 파일은 안전하게 저장되었습니다.`]
-        : [`완료: ${fmtInt(b.file_count)}개 파일(${fmtBytes(b.total_bytes)})을 백업하고 폴더를 비웠습니다.`];
-      if (b.ingested) notes.push(`새 통화 ${fmtInt(b.ingested)}건을 먼저 기록했습니다.`);
-      if (b.left_recent) notes.push(`동기화 중인 파일 ${fmtInt(b.left_recent)}개는 남겨 두었습니다.`);
-      if (b.unparsed) notes.push(`파일 이름을 해석하지 못한 ${fmtInt(b.unparsed)}개는 통화로 기록되지 않고 백업만 되었습니다.`);
-      msg.textContent = notes.join(" ");
-      if (b.ingested) load();
-      if (state.drawerAgent === agent.id) renderAdmin(agent, r.sync_folder, r.backups);
-    } catch (err) {
-      msg.className = "small err"; msg.textContent = err.message;
-      btn.disabled = false;
-    }
-  }
-
-  // 테마 변경 시 색 다시 그리기
+  // 테마가 바뀌면 차트 색 다시 그리기
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => state.data && render());
 
   // ---------- 시작 ----------
