@@ -4,12 +4,34 @@
     {
       "src": "api/index.py",
       "use": "@vercel/python",
-      "config": { "includeFiles": "cti/**", "maxDuration": 30 }
+      "config": {
+        "includeFiles": "cti/**",
+        "maxDuration": 30
+      }
     },
-    { "src": "static/**", "use": "@vercel/static" }
+    {
+      "src": "static/**",
+      "use": "@vercel/static"
+    }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/index.py" },
-    { "src": "/", "dest": "/static/index.html" }
+    {
+      "src": "/",
+      "dest": "/static/index.html",
+      "headers": {
+        "cache-control": "no-cache"
+      }
+    },
+    {
+      "src": "/static/(.*)",
+      "headers": {
+        "cache-control": "public, max-age=0, must-revalidate"
+      },
+      "continue": true
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    }
   ]
 }
